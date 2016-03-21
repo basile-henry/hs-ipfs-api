@@ -68,3 +68,8 @@ addDir :: API.Endpoint -> FilePath -> IO BL.ByteString
 addDir endpoint path = do
     paths <- getRecursiveContents path
     API.call endpoint ["add"] [("r", "true"), ("q", "true")] [] (API.Dir paths)
+
+add :: API.Endpoint -> BL.ByteString -> IO BL.ByteString
+add endpoint raw =
+    API.call endpoint ["add"] [("q", "true")] [] (API.Raw raw)
+
