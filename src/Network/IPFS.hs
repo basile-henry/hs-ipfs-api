@@ -1,34 +1,39 @@
 module Network.IPFS where
 
-import Control.Applicative ((<$>))
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as BL
-import qualified Data.ByteString.Base58 as B58
-import qualified Data.ByteString.Char8 as C
-import Data.Maybe (fromJust)
-import Data.Foldable (toList)
-import Text.ProtocolBuffers.WireMessage (messageGet)
-import Text.ProtocolBuffers.Basic (uToString)
-import qualified Network.IPFS.API as API
-import qualified Network.IPFS.MerkleDAG.PBNode as PBN
-import qualified Network.IPFS.MerkleDAG.PBLink as PBL
+import           Control.Monad                    (forM)
+import qualified Data.ByteString                  as B
+import qualified Data.ByteString.Base58           as B58
+import qualified Data.ByteString.Char8            as C
+import qualified Data.ByteString.Lazy             as BL
+import           Data.Foldable                    (toList)
+import           Data.Maybe                       (fromJust)
+import qualified Network.IPFS.API                 as API
+import qualified Network.IPFS.MerkleDAG.PBLink    as PBL
+import qualified Network.IPFS.MerkleDAG.PBNode    as PBN
+import           System.Directory                 (doesDirectoryExist,
+                                                   getDirectoryContents)
+import           System.FilePath                  ((</>))
+import           Text.ProtocolBuffers.Basic       (uToString)
+import           Text.ProtocolBuffers.WireMessage (messageGet)
 
 type Hash = B.ByteString -- TODO use multihash library
 type Data = B.ByteString
 
-data Object = Object { hash :: Hash
-                     , payload :: Data
-                     , links :: [(String, Object)]
-                     } deriving (Show)
+data Object = Object {
+        hash    :: Hash,
+        payload :: Data,
+        links   :: [(String, Object)]
+    } deriving (Show)
 
-cat :: API.Endpoint -> String -> IO BL.ByteString
-cat endpoint path = API.call endpoint ["cat"] [] [path]
+cat :: API.Endpoint -> FilePath -> IO BL.ByteString
+cat endpoint path = API.call endpoint ["cat"] [] [path] API.Empty
 
 getPBNode :: API.Endpoint -> Hash -> IO PBN.PBNode
 getPBNode endpoint digest = do
     resp <- API.call endpoint
         ["object", "get"] [("encoding", "protobuf")]
         [C.unpack $ B58.encodeBase58 B58.bitcoinAlphabet digest]
+        API.Empty
     return $ case messageGet resp of
         Right (node, _) -> node
         Left err -> error err
@@ -41,4 +46,25 @@ getObject endpoint digest = do
         data' = BL.toStrict . fromJust $ PBN.data' pbnode
     children <- mapM resolveLink links'
     return (Object digest data' $ zip names children)
-  where resolveLink = getObject endpoint . BL.toStrict . fromJust . PBL.hash
+    where resolveLink = getObject endpoint . BL.toStrict . fromJust . PBL.hash
+
+addFile :: API.Endpoint -> FilePath -> IO BL.ByteString
+addFile endpoint path =
+    API.call endpoint ["add"] [("q", "true")] [] (API.File path)
+
+getRecursiveContents :: FilePath -> IO [FilePath]
+getRecursiveContents topdir = do
+  names <- getDirectoryContents topdir
+  let properNames = filter (`notElem` [".", ".."]) names
+  paths <- forM properNames $ \name -> do
+    let path = topdir </> name
+    isDirectory <- doesDirectoryExist path
+    if isDirectory
+      then getRecursiveContents path
+      else return [path]
+  return (concat paths)
+
+addDir :: API.Endpoint -> FilePath -> IO BL.ByteString
+addDir endpoint path = do
+    paths <- getRecursiveContents path
+    API.call endpoint ["add"] [("r", "true"), ("q", "true")] [] (API.Dir paths)
