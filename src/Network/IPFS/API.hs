@@ -17,10 +17,14 @@ data Endpoint = Endpoint HTTP.Manager String
 -- | To initialize the API at an IPFS node, the Endpoint
 -- For example (in a do block):
 -- > endpoint <- init "http://localhost:5001"
-init :: String -> IO Endpoint
-init host = do
+initEndpoint :: String -> IO Endpoint
+initEndpoint host = do
     manager <- HTTP.newManager HTTP.tlsManagerSettings
     return $ Endpoint manager host
+
+localEndpoint :: IO Endpoint
+localEndpoint = initEndpoint "http://localhost:5001"
+
 
 data Content = Empty
              | File FilePath
@@ -32,7 +36,7 @@ call :: Endpoint            -- ^ IPFS node
      -> [String]            -- ^ command
      -> [(String, String)]  -- ^ options [(key, value)]
      -> [String]            -- ^ arguments (an IPFS path for example)
-     -> Content    -- ^ content to send
+     -> Content             -- ^ content to send
      -> IO ByteString       -- ^ Return of a successful API request
 call (Endpoint manager host) cmd opts args content = do
     req <- MFD.formDataBody (parts content) simpleReq

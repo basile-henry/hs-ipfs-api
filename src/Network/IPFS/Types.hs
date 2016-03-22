@@ -1,17 +1,18 @@
-module Types(Path(..), Hash(..), fromString) where
+module Network.IPFS.Types(Path(..), Hash, fromString) where
 
-import           Control.Monad     (liftM2)
-import           Data.List         (intercalate)
-import           Data.List.SplitOn (splitOn)
+import           Control.Monad   (liftM2)
+import           Data.ByteString (ByteString)
+import           Data.List       (intercalate)
+import           Data.List.Split (splitOn)
 
-type Hash = B.ByteString -- TODO use multihash library
+type Hash = ByteString -- TODO use multihash library
 
 data Path = IPFS Hash FilePath
           | IPNS Hash FilePath
 
 instance Show Path where
-    show (IPFS hash filePath) = "/ipfs/" ++ show hash ++ "/" + show filePath
-    show (IPNS hash filePath) = "/ipns/" ++ show hash ++ "/" + show filePath
+    show (IPFS hash filePath) = "/ipfs/" ++ show hash ++ "/" ++ show filePath
+    show (IPNS hash filePath) = "/ipns/" ++ show hash ++ "/" ++ show filePath
 
 fromString :: String -> Maybe Path
 fromString str = case (splitOn "/" str) of

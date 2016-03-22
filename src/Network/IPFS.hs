@@ -48,9 +48,11 @@ getObject endpoint digest = do
     return (Object digest data' $ zip names children)
     where resolveLink = getObject endpoint . BL.toStrict . fromJust . PBL.hash
 
-addFile :: API.Endpoint -> FilePath -> IO BL.ByteString
-addFile endpoint path =
-    API.call endpoint ["add"] [("q", "true")] [] (API.File path)
+addFile :: API.Endpoint -> FilePath -> IO B.ByteString
+addFile endpoint path = do
+    resp <- API.call endpoint ["add"] [("q", "true")] [] (API.File path)
+    return $ getLastHash resp
+
 
 getRecursiveContents :: FilePath -> IO [FilePath]
 getRecursiveContents topdir = do
@@ -64,12 +66,18 @@ getRecursiveContents topdir = do
       else return [path]
   return (concat paths)
 
-addDir :: API.Endpoint -> FilePath -> IO BL.ByteString
+addDir :: API.Endpoint -> FilePath -> IO B.ByteString
 addDir endpoint path = do
     paths <- getRecursiveContents path
-    API.call endpoint ["add"] [("r", "true"), ("q", "true")] [] (API.Dir paths)
+    resp  <- API.call endpoint ["add"] [("r", "true"), ("q", "true")] [] (API.Dir paths)
+    return $ getLastHash resp
 
-add :: API.Endpoint -> BL.ByteString -> IO BL.ByteString
-add endpoint raw =
-    API.call endpoint ["add"] [("q", "true")] [] (API.Raw raw)
+add :: API.Endpoint -> BL.ByteString -> IO B.ByteString
+add endpoint raw = do
+    resp <- API.call endpoint ["add"] [("q", "true")] [] (API.Raw raw)
+    return $ getLastHash resp
 
+-- Ugly temporary method, a solution like using Aeson to parse the json output
+-- might be more appropriate
+getLastHash :: BL.ByteString -> B.ByteString
+getLastHash = last . init . B.split (B.head $ C.singleton '"') . BL.toStrict

@@ -1,12 +1,13 @@
-module IPNS(resolve, publish) where
+module Network.IPNS(resolve, publish) where
 
+-- import qualified Data.ByteString      as B
 import           Data.ByteString.Lazy (ByteString)
-import           Network.IPFS.API     (Endpoint (..), call)
+import           Network.IPFS.API     (Content (..), Endpoint (..), call)
 
-resolve :: Endpoint -> Hash -> IO ByteString
-resolve endpoint hash =
-    call endpoint ["name", "resolve"] [] [hash]
+-- type Hash = B.ByteString -- TODO use multihash library
 
-publish :: Endpoint -> Hash -> IO ByteString
-publish endpoint hash =
-    call endpoint ["name", "publish"] [] [hash]
+resolve :: Endpoint -> FilePath -> IO ByteString
+resolve endpoint path = call endpoint ["name", "resolve"] [("encoding", "json")] [path] Empty
+
+publish :: Endpoint -> FilePath -> IO ByteString
+publish endpoint path = call endpoint ["name", "publish"] [] [path] Empty
