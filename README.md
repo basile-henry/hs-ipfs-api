@@ -16,6 +16,10 @@ cabal build
 
 Checkout the [documentation](https://ipfs.io/ipfs/QmPtj3NjRSGob9xvSLVWXihxN721MTEyofrKTzhkQsyE8y/)! :)
 
+## API currently implemented
+
+Take a look at the [ToDo list](TODO.md).
+
 ## Tests
 
 Note: Some of the tests are node dependent and might publish hashes (if that is a problem, disable the IPNS tests by modifying tests/Main.hs)
