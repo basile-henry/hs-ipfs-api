@@ -1,4 +1,5 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 {-|
 Module      : IPNS
@@ -42,15 +43,14 @@ module Network.IPNS (
     publishTo
 ) where
 
-import           Data.Aeson        (FromJSON (..), decode, genericParseJSON)
-import           Data.Aeson.Casing (aesonDrop)
-import           GHC.Generics      (Generic)
-import           Network.IPFS.API  (Endpoint, call)
+import           Data.Aeson       (FromJSON (..), decode, withObject, (.:))
+import           GHC.Generics     (Generic)
+import           Network.IPFS.API (Endpoint, call)
 
-data Resolve = Resolve { _Path :: FilePath } deriving (Generic, Show)
+data Resolve = Resolve { path :: FilePath } deriving (Generic, Show)
 
 instance FromJSON Resolve where
-   parseJSON = genericParseJSON $ aesonDrop 1 id
+   parseJSON = withObject "" $ \o -> Resolve <$> o .: "Path"
 
 -- | Recursively resolve the IPNS of the Endpoint
 --
@@ -58,7 +58,7 @@ instance FromJSON Resolve where
 --
 -- On failure returns 'Nothing'
 resolve :: Endpoint -> IO (Maybe FilePath)
-resolve endpoint = (_Path <$>)
+resolve endpoint = (path <$>)
     <$> decode
     <$> call endpoint ["name", "resolve"] [("r", "true")] []
 
@@ -68,16 +68,16 @@ resolve endpoint = (_Path <$>)
 --
 -- On failure returns 'Nothing'
 resolvePath :: Endpoint -> FilePath -> IO (Maybe FilePath)
-resolvePath endpoint path = (_Path <$>)
+resolvePath endpoint filePath = (path <$>)
     <$> decode
-    <$> call endpoint ["name", "resolve"] [("r", "true")] [path]
+    <$> call endpoint ["name", "resolve"] [("r", "true")] [filePath]
 
 
 -- TODO change the type of _Name to be a Hash
-data Publish = Publish { _Name :: FilePath } deriving (Generic, Show)
+data Publish = Publish { name :: FilePath } deriving (Generic, Show)
 
 instance FromJSON Publish where
-   parseJSON = genericParseJSON $ aesonDrop 1 id
+   parseJSON = withObject "" $ \o -> Publish <$> o .: "Name"
 
 -- | Publish an object to IPNS. It publishes object given by 'Filepath' to the 'Endpoint' 's IPNS
 --
@@ -86,16 +86,18 @@ instance FromJSON Publish where
 --
 -- On failure returns 'Nothing'
 publish :: Endpoint -> FilePath -> IO (Maybe FilePath)
-publish endpoint path = (_Name <$>)
+publish endpoint filePath = (name <$>)
     <$> decode
-    <$> call endpoint ["name", "publish"] [] [path]
+    <$> call endpoint ["name", "publish"] [] [filePath]
 
 -- | Publish an object to IPNS. It publishes object given by 'Filepath' to the second 'FilePath'
 --
 -- On success returns 'Just' 'FilePath'
 --
 -- On failure returns 'Nothing'
+--
+-- NB: not yet implemented in the go-ipfs daemon
 publishTo :: Endpoint -> FilePath -> FilePath -> IO (Maybe FilePath)
-publishTo endpoint path to = (_Name <$>)
+publishTo endpoint filePath to = (name <$>)
     <$> decode
-    <$> call endpoint ["name", "publish"] [] [path, to]
+    <$> call endpoint ["name", "publish"] [] [filePath, to]

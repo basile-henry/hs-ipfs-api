@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Network.IPFS (
@@ -14,11 +15,12 @@ module Network.IPFS (
     newObject,
     addLink,
     addFile,
+    addFiles,
     addDir,
     add
 ) where
 
-import           Control.Monad                    (forM)
+import           Control.Monad                    (foldM, forM)
 import           Data.Aeson                       (FromJSON (..), decode,
                                                    genericParseJSON, withObject,
                                                    (.:), (.:?))
@@ -31,7 +33,7 @@ import qualified Data.ByteString.Lazy.Char8       as LC
 import qualified Data.ByteString.Lazy.UTF8        as LU
 import qualified Data.ByteString.UTF8             as U
 import           Data.Foldable                    (toList)
-import           Data.Maybe                       (fromJust, maybeToList)
+import           Data.Maybe                       (fromJust, maybe, maybeToList)
 import           Data.Sequence                    (fromList)
 import           GHC.Generics                     (Generic)
 import           Network.IPFS.API                 (Content (..), Endpoint (..),
@@ -40,7 +42,7 @@ import qualified Network.IPFS.MerkleDAG.Link      as PBL
 import qualified Network.IPFS.MerkleDAG.Node      as PBN
 import           System.Directory                 (doesDirectoryExist,
                                                    getDirectoryContents)
-import           System.FilePath                  ((</>))
+import           System.FilePath                  ((</>), splitPath)
 import           Text.ProtocolBuffers.Basic       (Utf8, uFromString, uToString)
 import           Text.ProtocolBuffers.WireMessage (messageGet)
 
@@ -136,20 +138,29 @@ addFile :: Endpoint -> FilePath -> IO (Maybe FileHash)
 addFile endpoint path = decode
     <$> callWithContent endpoint ["add"] [("q", "true")] [] (File path)
 
-getRecursiveContents :: FilePath -> IO [FilePath]
-getRecursiveContents topdir = do
-    names <- getDirectoryContents topdir
-    let properNames = filter (`notElem` [".", ".."]) names
-    paths <- forM properNames $ \name -> do
-        let path = topdir </> name
-        isDirectory <- doesDirectoryExist path
-        if isDirectory
-            then getRecursiveContents path
-            else return [path]
-    return (concat paths)
+addFiles :: Endpoint -> [FilePath] -> IO (Maybe [FileHash])
+addFiles endpoint paths = (mapM decode)
+    <$> LC.lines
+    <$> callWithContent endpoint ["add"] [("q", "true")] [] (Files paths)
 
-addDir :: Endpoint -> FilePath -> IO (Maybe [FileHash])
-addDir endpoint path = do
-    paths <- getRecursiveContents path
-    bytestring <- callWithContent endpoint ["add"] [("r", "true"), ("q", "true")] [] (Dir paths)
-    return $ mapM decode $ LC.lines bytestring
+addDir :: Endpoint -> FilePath -> IO (Maybe FileHash)
+addDir endpoint topdir = do
+    doesDirectoryExist topdir >>= (\case
+        False -> return Nothing
+        True  -> do
+            names <- getDirectoryContents topdir
+            let properNames = filter (`notElem` [".", ".."]) names
+            fileHashes <- forM properNames $ \name -> do
+                let path = topdir </> name
+                isDirectory <- doesDirectoryExist path
+                if isDirectory
+                    then addDir  endpoint path
+                    else addFile endpoint path
+            root <- newObject endpoint Unixfs
+            hash <- foldM applyHash root fileHashes
+            return $ FileHash (last . splitPath $ topdir) <$> hash)
+    where
+        applyHash :: Maybe Hash -> Maybe FileHash -> IO (Maybe Hash)
+        applyHash Nothing _         = return Nothing
+        applyHash _       Nothing   = return Nothing
+        applyHash (Just r) (Just f) = addLink endpoint f r

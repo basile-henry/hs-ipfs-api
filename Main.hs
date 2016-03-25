@@ -22,11 +22,11 @@ main = do
     -- print obj
     -- txt <- ipfs `cat` (mhash ++ "/readme")
     -- putStrLn $ LU.toString txt
-    h <- fromJust <$> ipfs `addFile` "testsend.txt"
-    print h
-    base <- fromJust <$> newObject ipfs Unixfs
-    print base
-    print =<< (addLink ipfs h base)
+    dir <- fromJust <$> ipfs `addDir` "testdir"
+    print dir
+    -- base <- fromJust <$> newObject ipfs Unixfs
+    -- print base
+    -- print =<< mapM (\h -> addLink ipfs h base) hs
     -- c <- ipfs `cat` (U.toString h)
     -- print c
 

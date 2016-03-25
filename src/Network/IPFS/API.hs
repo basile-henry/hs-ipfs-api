@@ -33,9 +33,9 @@ localEndpoint :: IO Endpoint
 localEndpoint = initEndpoint "http://localhost:5001"
 
 data Content = Empty
-             | File FilePath
-             | Dir  [FilePath]
-             | Raw  ByteString
+             | File  FilePath
+             | Files [FilePath]
+             | Raw   ByteString
 
 
 -- | The 'call' function makes an API call to the IPFS node given by the 'Endpoint'
@@ -68,7 +68,7 @@ callWithContent (Endpoint manager host) cmd opts args content = do
         }
 
         parts :: Content -> [MFD.Part]
-        parts  Empty            = []
-        parts (File filePath)   = [MFD.partFileSourceChunked (T.pack filePath) filePath]
-        parts (Dir  filePaths)  = map (\f -> MFD.partFileSourceChunked (T.pack f) f) filePaths
-        parts (Raw  byteString) = [MFD.partLBS "raw" byteString]
+        parts  Empty             = []
+        parts (File  filePath)   = [MFD.partFileSourceChunked (T.pack filePath) filePath]
+        parts (Files filePaths)  = map (\f -> MFD.partFileSourceChunked (T.pack f) f) filePaths
+        parts (Raw   byteString) = [MFD.partLBS "raw" byteString]
