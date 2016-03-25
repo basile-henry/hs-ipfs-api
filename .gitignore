@@ -16,3 +16,4 @@ cabal.config
 *.bak
 src/Network/IPFS/MerkleDAG*
 src/Network/IPFS/UnixFS*
+*.sublime*

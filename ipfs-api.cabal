@@ -58,8 +58,8 @@ library
   
   -- Modules included in this library but not exported.
   other-modules:       Network.IPFS.MerkleDAG,
-                       Network.IPFS.MerkleDAG.PBLink,
-                       Network.IPFS.MerkleDAG.PBNode,
+                       Network.IPFS.MerkleDAG.Link,
+                       Network.IPFS.MerkleDAG.Node,
                        Network.IPFS.UnixFS,
                        Network.IPFS.UnixFS.Data,
                        Network.IPFS.UnixFS.Data.DataType,
@@ -70,6 +70,9 @@ library
   
   -- Other library packages from which modules are imported.
   build-depends:       base >=4.7,
+                       aeson,
+                       aeson-casing,
+                       containers,
                        directory,
                        filepath,
                        http-conduit,
@@ -83,6 +86,7 @@ library
                        text,
                        utf8-string,
                        split
+                       --safe
   
   -- Directories containing source files.
   hs-source-dirs:      src
