@@ -10,6 +10,7 @@ module Network.IPFS (
     Template (..),
     FileHash (..),
     Object (..),
+    ID (..),
     cat,
     getObject,
     newObject,
@@ -20,7 +21,8 @@ module Network.IPFS (
     add,
     addFile,
     addFiles,
-    addDir
+    addDir,
+    getID
 ) where
 
 import           Control.Monad                    (foldM, forM)
@@ -48,13 +50,26 @@ import           Text.ProtocolBuffers.Basic       (Utf8, uFromString, uToString)
 import           Text.ProtocolBuffers.WireMessage (messageGet)
 
 type Hash     = B.ByteString -- TODO use multihash library
+
+instance FromJSON Hash where
+    parseJSON = (U.fromString <$>) . parseJSON
+
 type Data     = B.ByteString
 data Template = Unixfs | None deriving Show
 data GetHash  = GetHash { getHash :: Hash } deriving (Generic, Show)
+
+instance FromJSON GetHash where
+    parseJSON = withObject "" $ \o -> GetHash <$> o .: "Hash"
+
 data FileHash = FileHash {
         fileName :: FilePath,
         fileHash :: Hash
     } deriving (Generic, Show, Eq)
+
+instance FromJSON FileHash where
+    parseJSON = withObject "" $ \o -> FileHash
+        <$> o .: "Name"
+        <*> o .: "Hash"
 
 data Object = Object {
         objectHash    :: Hash,
@@ -62,8 +77,21 @@ data Object = Object {
         objectLinks   :: [(String, Object)]
     } deriving (Generic, Show, Eq)
 
-instance FromJSON Hash where
-    parseJSON = (U.fromString <$>) . parseJSON
+data ID = ID {
+        id              :: Hash,
+        publicKey       :: Hash,
+        addresses       :: [FilePath], -- TODO replace with multiaddresses ?
+        agentVersion    :: String,
+        protocolVersion :: String
+    } deriving (Generic, Show, Eq)
+
+instance FromJSON ID where
+    parseJSON = withObject "" $ \o -> ID
+        <$> o .: "ID"
+        <*> o .: "PublicKey"
+        <*> o .: "Addresses"
+        <*> o .: "AgentVersion"
+        <*> o .: "ProtocolVersion"
 
 instance FromJSON LC.ByteString where
     parseJSON = (LU.fromString <$>) . parseJSON
@@ -82,19 +110,13 @@ instance FromJSON PBL.Link where
         <*> o .: "Name"
         <*> o .: "Size"
 
-instance FromJSON GetHash where
-    parseJSON = withObject "" $ \o -> GetHash <$> o .: "Hash"
-
-instance FromJSON FileHash where
-    parseJSON = withObject "" $ \o -> FileHash
-        <$> o .: "Name"
-        <*> o .: "Hash"
+-- | = Cat
 
 cat :: Endpoint -> FilePath -> IO BL.ByteString
 cat endpoint path = call endpoint ["cat"] [] [path]
 
 
--- == ipfs object
+-- | = Object
 
 getNode :: Endpoint -> Hash -> IO PBN.Node
 getNode endpoint digest = do
@@ -115,8 +137,6 @@ getObject endpoint digest = do
     return (Object digest data' $ zip names children)
     where resolveLink = getObject endpoint . BL.toStrict . fromJust . PBL.hash
 
-
-
 newObject :: Endpoint -> Template -> IO (Maybe Hash)
 newObject endpoint Unixfs = (getHash <$>)
     <$> decode
@@ -125,7 +145,8 @@ newObject endpoint None = (getHash <$>)
     <$> decode
     <$> call endpoint ["object", "new"] [] []
 
--- === ipfs object patch
+-- | == Object patch
+
 addLink :: Endpoint -> Hash -> FileHash -> IO (Maybe Hash)
 addLink endpoint root (FileHash name hash) = (getHash <$>)
     <$> decode
@@ -146,8 +167,7 @@ appendData endpoint root data' = (getHash <$>)
     <$> decode
     <$> callWithContent endpoint ["object", "patch", "append-data"] [] [U.toString root] (Raw $ BL.fromStrict data')
 
-
--- == ipfs add
+-- | = Add
 
 add :: Endpoint -> BL.ByteString -> IO (Maybe FileHash)
 add endpoint raw = decode
@@ -183,3 +203,8 @@ addDir endpoint topdir = do
         applyHash Nothing _         = return Nothing
         applyHash _       Nothing   = return Nothing
         applyHash (Just r) (Just f) = addLink endpoint r f
+
+-- | = ID
+
+getID :: Endpoint -> IO (Maybe ID)
+getID endpoint = decode <$> call endpoint ["id"] [] []

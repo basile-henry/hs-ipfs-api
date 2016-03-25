@@ -47,7 +47,7 @@ List of commands to add to the API:
 - [ ] files stat
 - [ ] files write
 - [ ] get
-- [ ] id
+- [x] id
 - [ ] init (**will not be added to the API**)
 - [ ] log
 - [ ] log level

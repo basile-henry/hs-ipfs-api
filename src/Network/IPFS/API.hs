@@ -23,7 +23,8 @@ data Endpoint = Endpoint HTTP.Manager String
 
 -- | To initialize the API at an IPFS node, the Endpoint
 -- For example (in a do block):
--- > endpoint <- init "http://localhost:5001"
+--
+-- > endpoint <- initEndpoint "http://localhost:5001"
 initEndpoint :: String -> IO Endpoint
 initEndpoint host = do
     manager <- HTTP.newManager HTTP.tlsManagerSettings
