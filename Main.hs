@@ -14,6 +14,7 @@ import           Network.IPFS.API
 main :: IO ()
 main = do
     ipfs <- localEndpoint
+    -- ipfs <- initEndpoint "http://localhost:5002"
     -- print =<< ipfs `publish` "QmPio4aCNzuWvpp2P34ohhyvnWhZ3hsy16raeYTW3Cc2Ra"
     -- print =<< resolve ipfs
     -- let mhash = "QmPXME1oRtoT627YKaDPDQ3PwA8tdP9rWuAAweLzqSwAWT"
@@ -22,8 +23,12 @@ main = do
     -- print obj
     -- txt <- ipfs `cat` (mhash ++ "/readme")
     -- putStrLn $ LU.toString txt
-    dir <- fromJust <$> ipfs `addDir` "testdir"
-    print dir
+    -- f <- ipfs `addFile` "testsend.txt"
+    -- print f
+    -- str <- ipfs `add` "This is a test string"
+    -- print str
+    object   <- getObject ipfs $ U.fromString "QmV2YwENHFRdrAoHi7X2zQUo93Tag7pwYv5DgPYpw2hW3M"
+    print object
     -- base <- fromJust <$> newObject ipfs Unixfs
     -- print base
     -- print =<< mapM (\h -> addLink ipfs h base) hs

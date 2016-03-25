@@ -1,30 +1,31 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Network.IPFS (
-    Object (..),
-    Template (..),
     Hash,
     Data,
+    Template (..),
+    FileHash (..),
+    Object (..),
     cat,
-    getNode,
     getObject,
     newObject,
     addLink,
+    removeLink,
+    setData,
+    appendData,
+    add,
     addFile,
     addFiles,
-    addDir,
-    add
+    addDir
 ) where
 
 import           Control.Monad                    (foldM, forM)
 import           Data.Aeson                       (FromJSON (..), decode,
-                                                   genericParseJSON, withObject,
-                                                   (.:), (.:?))
-import           Data.Aeson.Casing                (aesonPrefix)
+                                                   withObject, (.:), (.:?))
 import qualified Data.ByteString                  as B
 import qualified Data.ByteString.Base58           as B58
 import qualified Data.ByteString.Char8            as C
@@ -33,7 +34,7 @@ import qualified Data.ByteString.Lazy.Char8       as LC
 import qualified Data.ByteString.Lazy.UTF8        as LU
 import qualified Data.ByteString.UTF8             as U
 import           Data.Foldable                    (toList)
-import           Data.Maybe                       (fromJust, maybe, maybeToList)
+import           Data.Maybe                       (fromJust, maybeToList)
 import           Data.Sequence                    (fromList)
 import           GHC.Generics                     (Generic)
 import           Network.IPFS.API                 (Content (..), Endpoint (..),
@@ -42,11 +43,24 @@ import qualified Network.IPFS.MerkleDAG.Link      as PBL
 import qualified Network.IPFS.MerkleDAG.Node      as PBN
 import           System.Directory                 (doesDirectoryExist,
                                                    getDirectoryContents)
-import           System.FilePath                  ((</>), splitPath)
+import           System.FilePath                  (splitPath, (</>))
 import           Text.ProtocolBuffers.Basic       (Utf8, uFromString, uToString)
 import           Text.ProtocolBuffers.WireMessage (messageGet)
 
-type Hash = B.ByteString -- TODO use multihash library
+type Hash     = B.ByteString -- TODO use multihash library
+type Data     = B.ByteString
+data Template = Unixfs | None deriving Show
+data GetHash  = GetHash { getHash :: Hash } deriving (Generic, Show)
+data FileHash = FileHash {
+        fileName :: FilePath,
+        fileHash :: Hash
+    } deriving (Generic, Show, Eq)
+
+data Object = Object {
+        objectHash    :: Hash,
+        objectPayload :: Data,
+        objectLinks   :: [(String, Object)]
+    } deriving (Generic, Show, Eq)
 
 instance FromJSON Hash where
     parseJSON = (U.fromString <$>) . parseJSON
@@ -68,13 +82,19 @@ instance FromJSON PBL.Link where
         <*> o .: "Name"
         <*> o .: "Size"
 
-type Data = B.ByteString
+instance FromJSON GetHash where
+    parseJSON = withObject "" $ \o -> GetHash <$> o .: "Hash"
 
-data Object = Object {
-        objectHash    :: Hash,
-        objectPayload :: Data,
-        objectLinks   :: [(String, Object)]
-    } deriving (Generic, Show)
+instance FromJSON FileHash where
+    parseJSON = withObject "" $ \o -> FileHash
+        <$> o .: "Name"
+        <*> o .: "Hash"
+
+cat :: Endpoint -> FilePath -> IO BL.ByteString
+cat endpoint path = call endpoint ["cat"] [] [path]
+
+
+-- == ipfs object
 
 getNode :: Endpoint -> Hash -> IO PBN.Node
 getNode endpoint digest = do
@@ -96,17 +116,6 @@ getObject endpoint digest = do
     where resolveLink = getObject endpoint . BL.toStrict . fromJust . PBL.hash
 
 
-cat :: Endpoint -> FilePath -> IO BL.ByteString
-cat endpoint path = call endpoint ["cat"] [] [path]
-
-data Template = Unixfs
-              | None
-            deriving Show
-
-data GetHash = GetHash { getHash :: Hash } deriving (Generic, Show)
-
-instance FromJSON GetHash where
-    parseJSON = withObject "" $ \o -> GetHash <$> o .: "Hash"
 
 newObject :: Endpoint -> Template -> IO (Maybe Hash)
 newObject endpoint Unixfs = (getHash <$>)
@@ -116,19 +125,29 @@ newObject endpoint None = (getHash <$>)
     <$> decode
     <$> call endpoint ["object", "new"] [] []
 
--- ipfs object patch
-addLink :: Endpoint -> FileHash -> Hash -> IO (Maybe Hash)
-addLink endpoint (FileHash name hash) root = (getHash <$>)
+-- === ipfs object patch
+addLink :: Endpoint -> Hash -> FileHash -> IO (Maybe Hash)
+addLink endpoint root (FileHash name hash) = (getHash <$>)
     <$> decode
     <$> call endpoint ["object", "patch", "add-link"] [] [U.toString root, name, U.toString hash]
 
-data FileHash = FileHash {
-        fileName :: FilePath,
-        fileHash :: Hash
-    } deriving (Generic, Show)
+removeLink :: Endpoint -> Hash -> FilePath -> IO (Maybe Hash)
+removeLink endpoint root name = (getHash <$>)
+    <$> decode
+    <$> call endpoint ["object", "patch", "rm-link"] [] [U.toString root, name]
 
-instance FromJSON FileHash where
-   parseJSON = genericParseJSON $ aesonPrefix id
+setData :: Endpoint -> Hash -> Data -> IO (Maybe Hash)
+setData endpoint root data' = (getHash <$>)
+    <$> decode
+    <$> callWithContent endpoint ["object", "patch", "set-data"] [] [U.toString root] (Raw $ BL.fromStrict data')
+
+appendData :: Endpoint -> Hash -> Data -> IO (Maybe Hash)
+appendData endpoint root data' = (getHash <$>)
+    <$> decode
+    <$> callWithContent endpoint ["object", "patch", "append-data"] [] [U.toString root] (Raw $ BL.fromStrict data')
+
+
+-- == ipfs add
 
 add :: Endpoint -> BL.ByteString -> IO (Maybe FileHash)
 add endpoint raw = decode
@@ -163,4 +182,4 @@ addDir endpoint topdir = do
         applyHash :: Maybe Hash -> Maybe FileHash -> IO (Maybe Hash)
         applyHash Nothing _         = return Nothing
         applyHash _       Nothing   = return Nothing
-        applyHash (Just r) (Just f) = addLink endpoint f r
+        applyHash (Just r) (Just f) = addLink endpoint r f

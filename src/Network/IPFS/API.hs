@@ -50,7 +50,7 @@ callWithContent :: Endpoint            -- ^ IPFS node
                 -> Content             -- ^ content to send
                 -> IO ByteString       -- ^ Return of a successful API request
 callWithContent (Endpoint manager host) cmd opts args content = do
-    req <- MFD.formDataBody (parts content) simpleReq
+    req <- MFD.formDataBody partsWithHeaders simpleReq
     HTTP.responseBody <$> HTTP.httpLbs req manager
     where
         path :: Builder
@@ -66,6 +66,9 @@ callWithContent (Endpoint manager host) cmd opts args content = do
             HTTP.path        = toByteString path,
             HTTP.queryString = URI.renderQuery True query
         }
+
+        partsWithHeaders :: [MFD.Part]
+        partsWithHeaders = map (`MFD.addPartHeaders` [("Content-Type", "application/octet-stream")]) $ parts content
 
         parts :: Content -> [MFD.Part]
         parts  Empty             = []

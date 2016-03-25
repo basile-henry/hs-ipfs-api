@@ -52,6 +52,11 @@ data Resolve = Resolve { path :: FilePath } deriving (Generic, Show)
 instance FromJSON Resolve where
    parseJSON = withObject "" $ \o -> Resolve <$> o .: "Path"
 
+data Publish = Publish { name :: FilePath } deriving (Generic, Show)
+
+instance FromJSON Publish where
+   parseJSON = withObject "" $ \o -> Publish <$> o .: "Name"
+
 -- | Recursively resolve the IPNS of the Endpoint
 --
 -- On success returns 'Just' 'FilePath'
@@ -71,13 +76,6 @@ resolvePath :: Endpoint -> FilePath -> IO (Maybe FilePath)
 resolvePath endpoint filePath = (path <$>)
     <$> decode
     <$> call endpoint ["name", "resolve"] [("r", "true")] [filePath]
-
-
--- TODO change the type of _Name to be a Hash
-data Publish = Publish { name :: FilePath } deriving (Generic, Show)
-
-instance FromJSON Publish where
-   parseJSON = withObject "" $ \o -> Publish <$> o .: "Name"
 
 -- | Publish an object to IPNS. It publishes object given by 'Filepath' to the 'Endpoint' 's IPNS
 --

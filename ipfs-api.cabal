@@ -51,47 +51,63 @@ cabal-version:       >=1.10
 
 library
   -- Modules exported by the library.
-  exposed-modules:     Network.IPFS,
-                       Network.IPFS.API,
-                       -- Network.IPFS.Types,
-                       Network.IPNS
+  exposed-modules:    Network.IPFS,
+                      Network.IPFS.API,
+                      Network.IPNS
   
   -- Modules included in this library but not exported.
-  other-modules:       Network.IPFS.MerkleDAG,
-                       Network.IPFS.MerkleDAG.Link,
-                       Network.IPFS.MerkleDAG.Node,
-                       Network.IPFS.UnixFS,
-                       Network.IPFS.UnixFS.Data,
-                       Network.IPFS.UnixFS.Data.DataType,
-                       Network.IPFS.UnixFS.Metadata
+  other-modules:      Network.IPFS.MerkleDAG,
+                      Network.IPFS.MerkleDAG.Link,
+                      Network.IPFS.MerkleDAG.Node,
+                      Network.IPFS.UnixFS,
+                      Network.IPFS.UnixFS.Data,
+                      Network.IPFS.UnixFS.Data.DataType,
+                      Network.IPFS.UnixFS.Metadata
   
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:    
   
   -- Other library packages from which modules are imported.
-  build-depends:       base >=4.7,
-                       aeson,
-                       aeson-casing,
-                       containers,
-                       directory,
-                       filepath,
-                       http-conduit,
-                       http-types,
-                       http-client,
-                       blaze-builder,
-                       bytestring,
-                       base58-bytestring,
-                       protocol-buffers,
-                       protocol-buffers-descriptor,
-                       text,
-                       utf8-string,
-                       split
-                       --safe
+  build-depends:      base >=4.7,
+                      aeson,
+                      containers,
+                      directory,
+                      filepath,
+                      http-conduit,
+                      http-types,
+                      http-client,
+                      blaze-builder,
+                      bytestring,
+                      base58-bytestring,
+                      protocol-buffers,
+                      protocol-buffers-descriptor,
+                      text,
+                      utf8-string
   
   -- Directories containing source files.
-  hs-source-dirs:      src
+  hs-source-dirs:     src
   
   -- Base language which the package is written in.
-  default-language:    Haskell2010
+  default-language:   Haskell2010
 
-  ghc-options:         -Wall
+  ghc-options:        -Wall
+
+
+test-suite ipfs-api-tests
+  type:               exitcode-stdio-1.0
+  
+  hs-source-dirs:     tests
+  
+  main-is:            Main.hs
+  
+  build-depends:      base >= 4.7,
+                      bytestring,
+                      ipfs-api,
+                      HUnit,
+                      tasty,
+                      tasty-hunit,
+                      utf8-string
+  
+  default-language:   Haskell2010
+  
+  ghc-options:        -Wall
