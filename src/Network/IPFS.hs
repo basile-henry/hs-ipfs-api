@@ -11,7 +11,11 @@ module Network.IPFS (
     FileHash (..),
     Object (..),
     ID (..),
+    encode,
+    decode,
     cat,
+    getID,
+    ls,
     getObject,
     newObject,
     addLink,
@@ -21,40 +25,44 @@ module Network.IPFS (
     add,
     addFile,
     addFiles,
-    addDir,
-    getID
+    addDir
 ) where
 
 import           Control.Monad                    (foldM, forM)
-import           Data.Aeson                       (FromJSON (..), decode,
-                                                   withObject, (.:), (.:?))
-import qualified Data.ByteString                  as B
-import qualified Data.ByteString.Base58           as B58
-import qualified Data.ByteString.Char8            as C
-import qualified Data.ByteString.Lazy             as BL
-import qualified Data.ByteString.Lazy.Char8       as LC
-import qualified Data.ByteString.Lazy.UTF8        as LU
+import           Data.Aeson                       (FromJSON (..),
+                                                   Value (String), withObject,
+                                                   (.:), (.:?))
+import qualified Data.Aeson                       as JSON
+import           Data.ByteString.Lazy             (ByteString, fromStrict,
+                                                   toStrict)
+import           Data.ByteString.Lazy.UTF8        (fromString, lines, toString)
 import qualified Data.ByteString.UTF8             as U
 import           Data.Foldable                    (toList)
 import           Data.Maybe                       (fromJust, maybeToList)
+import qualified Data.Multihash.Base              as MB
+import qualified Data.Multihash.Digest            as MD
 import           Data.Sequence                    (fromList)
+import           Data.Text                        (unpack)
 import           GHC.Generics                     (Generic)
 import           Network.IPFS.API                 (Content (..), Endpoint (..),
                                                    call, callWithContent)
 import qualified Network.IPFS.MerkleDAG.Link      as PBL
 import qualified Network.IPFS.MerkleDAG.Node      as PBN
+import           Prelude                          hiding (lines)
 import           System.Directory                 (doesDirectoryExist,
                                                    getDirectoryContents)
 import           System.FilePath                  (splitPath, (</>))
 import           Text.ProtocolBuffers.Basic       (Utf8, uFromString, uToString)
 import           Text.ProtocolBuffers.WireMessage (messageGet)
 
-type Hash     = B.ByteString -- TODO use multihash library
+type Hash     = MD.MultihashDigest
 
 instance FromJSON Hash where
-    parseJSON = (U.fromString <$>) . parseJSON
+    parseJSON (String s) = either (fail "Expected a Hash String") return $ decode . unpack $ s
+    parseJSON _          = fail "Expected a Hash String"
 
-type Data     = B.ByteString
+type Key      = ByteString -- Is it a multihash?
+type Data     = ByteString
 data Template = Unixfs | None deriving Show
 data GetHash  = GetHash { getHash :: Hash } deriving (Generic, Show)
 
@@ -78,8 +86,8 @@ data Object = Object {
     } deriving (Generic, Show, Eq)
 
 data ID = ID {
-        id              :: Hash,
-        publicKey       :: Hash,
+        idHash          :: Hash,
+        publicKey       :: Key,
         addresses       :: [FilePath], -- TODO replace with multiaddresses ?
         agentVersion    :: String,
         protocolVersion :: String
@@ -93,8 +101,8 @@ instance FromJSON ID where
         <*> o .: "AgentVersion"
         <*> o .: "ProtocolVersion"
 
-instance FromJSON LC.ByteString where
-    parseJSON = (LU.fromString <$>) . parseJSON
+instance FromJSON ByteString where
+    parseJSON = (fromString <$>) . parseJSON
 
 instance FromJSON Utf8 where
     parseJSON = (uFromString <$>) . parseJSON
@@ -110,76 +118,99 @@ instance FromJSON PBL.Link where
         <*> o .: "Name"
         <*> o .: "Size"
 
--- | = Cat
+encode :: Hash -> String
+encode hash = toString . MB.encode MB.Base58 $ MD.encode (MD.algorithm hash) (MD.digest hash)
 
-cat :: Endpoint -> FilePath -> IO BL.ByteString
+decode :: String -> Either String Hash
+decode string = (MD.decode . toStrict) =<< (MB.decode MB.Base58 $ fromString string)
+
+-- | = cat
+
+cat :: Endpoint -> FilePath -> IO ByteString
 cat endpoint path = call endpoint ["cat"] [] [path]
 
+-- | = id
 
--- | = Object
+getID :: Endpoint -> IO (Maybe ID)
+getID endpoint = JSON.decode <$> call endpoint ["id"] [] []
+
+-- | = ls
+
+ls :: Endpoint -> FilePath -> IO (Maybe [FileHash])
+ls = undefined
+-- ls endpoint path = do
+--     list <- call endpoint ["ls"] [] [path]
+--     print list
+--     return $ JSON.decode list
+
+-- | = object
 
 getNode :: Endpoint -> Hash -> IO PBN.Node
-getNode endpoint digest = do
+getNode endpoint hash = do
     resp <- call endpoint
         ["object", "get"] [("encoding", "protobuf")]
-        [C.unpack $ B58.encodeBase58 B58.bitcoinAlphabet digest]
+        [encode hash]
     return $ case messageGet resp of
         Right (node, _) -> node
         Left err -> error err
 
 getObject :: Endpoint -> Hash -> IO Object
-getObject endpoint digest = do
-    pbnode <- getNode endpoint digest
-    let links' = toList $ PBN.links pbnode
-        names = uToString . fromJust . PBL.name <$> links'
-        data' = BL.toStrict . fromJust $ PBN.data' pbnode
-    children <- mapM resolveLink links'
-    return (Object digest data' $ zip names children)
-    where resolveLink = getObject endpoint . BL.toStrict . fromJust . PBL.hash
+getObject = undefined
+-- getObject endpoint hash = do
+--     pbnode <- getNode endpoint hash
+--     let links' = toList $ PBN.links pbnode
+--         names = uToString . fromJust . PBL.name <$> links'
+--         data' = fromJust $ PBN.data' pbnode
+--     children <- mapM resolveLink links'
+--     return (Object hash data' $ zip names children)
+--     where resolveLink = getObject endpoint . fromJust . PBL.hash
 
 newObject :: Endpoint -> Template -> IO (Maybe Hash)
 newObject endpoint Unixfs = (getHash <$>)
-    <$> decode
+    <$> JSON.decode
     <$> call endpoint ["object", "new", "unixfs-dir"] [] []
 newObject endpoint None = (getHash <$>)
-    <$> decode
+    <$> JSON.decode
     <$> call endpoint ["object", "new"] [] []
 
--- | == Object patch
+-- Should PBL.Link be exported?
+-- getLinks :: Endpoint -> Hash -> IO (Maybe [PBL.Link])
+
+-- | == object patch
 
 addLink :: Endpoint -> Hash -> FileHash -> IO (Maybe Hash)
 addLink endpoint root (FileHash name hash) = (getHash <$>)
-    <$> decode
-    <$> call endpoint ["object", "patch", "add-link"] [] [U.toString root, name, U.toString hash]
+    <$> JSON.decode
+    <$> call endpoint ["object", "patch", "add-link"] [] [encode root, name, encode hash]
 
 removeLink :: Endpoint -> Hash -> FilePath -> IO (Maybe Hash)
 removeLink endpoint root name = (getHash <$>)
-    <$> decode
-    <$> call endpoint ["object", "patch", "rm-link"] [] [U.toString root, name]
+    <$> JSON.decode
+    <$> call endpoint ["object", "patch", "rm-link"] [] [encode root, name]
 
 setData :: Endpoint -> Hash -> Data -> IO (Maybe Hash)
 setData endpoint root data' = (getHash <$>)
-    <$> decode
-    <$> callWithContent endpoint ["object", "patch", "set-data"] [] [U.toString root] (Raw $ BL.fromStrict data')
+    <$> JSON.decode
+    <$> callWithContent endpoint ["object", "patch", "set-data"] [] [encode root] (Raw data')
 
 appendData :: Endpoint -> Hash -> Data -> IO (Maybe Hash)
 appendData endpoint root data' = (getHash <$>)
-    <$> decode
-    <$> callWithContent endpoint ["object", "patch", "append-data"] [] [U.toString root] (Raw $ BL.fromStrict data')
+    <$> JSON.decode
+    <$> callWithContent endpoint ["object", "patch", "append-data"] [] [encode root] (Raw data')
 
--- | = Add
+-- | = add
 
-add :: Endpoint -> BL.ByteString -> IO (Maybe FileHash)
-add endpoint raw = decode
+add :: Endpoint -> ByteString -> IO (Maybe FileHash)
+add endpoint raw = JSON.decode
     <$> callWithContent endpoint ["add"] [("q", "true")] [] (Raw raw)
 
 addFile :: Endpoint -> FilePath -> IO (Maybe FileHash)
-addFile endpoint path = decode
+addFile endpoint path = JSON.decode
     <$> callWithContent endpoint ["add"] [("q", "true")] [] (File path)
 
 addFiles :: Endpoint -> [FilePath] -> IO (Maybe [FileHash])
-addFiles endpoint paths = (mapM decode)
-    <$> LC.lines
+addFiles endpoint paths = (mapM JSON.decode)
+    <$> lines
     <$> callWithContent endpoint ["add"] [("q", "true")] [] (Files paths)
 
 addDir :: Endpoint -> FilePath -> IO (Maybe FileHash)
@@ -203,8 +234,3 @@ addDir endpoint topdir = do
         applyHash Nothing _         = return Nothing
         applyHash _       Nothing   = return Nothing
         applyHash (Just r) (Just f) = addLink endpoint r f
-
--- | = ID
-
-getID :: Endpoint -> IO (Maybe ID)
-getID endpoint = decode <$> call endpoint ["id"] [] []
