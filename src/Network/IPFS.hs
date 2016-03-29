@@ -132,7 +132,7 @@ instance FromJSON ID where
 
 parseAddresses :: JSON.Object -> Parser [MA.MultiAddr]
 parseAddresses o = (maybe
-    (fail "Could parse MultiAddr")
+    (fail "Couldn't parse MultiAddr")
     return
     =<< sequence . map MA.fromString) <$> (o .: "Addresses")
 

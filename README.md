@@ -14,7 +14,7 @@ cabal build
 
 ## Usage
 
-Checkout the [documentation](https://ipfs.io/ipfs/QmPtj3NjRSGob9xvSLVWXihxN721MTEyofrKTzhkQsyE8y/)! :)
+Checkout the [documentation](https://ipfs.io/ipfs/QmV3RcdnACJSDadzouvifqE6y2RGwxFCvNYfe1cuJB745r/)!
 
 ## API currently implemented
 

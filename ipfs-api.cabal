@@ -53,6 +53,7 @@ library
   -- Modules exported by the library.
   exposed-modules:    Network.IPFS,
                       Network.IPFS.API,
+                      Network.IPFS.Path,
                       Network.IPNS
   
   -- Modules included in this library but not exported.
@@ -83,7 +84,8 @@ library
                       protocol-buffers,
                       protocol-buffers-descriptor,
                       text,
-                      utf8-string
+                      utf8-string,
+                      split
   
   -- Directories containing source files.
   hs-source-dirs:     src
