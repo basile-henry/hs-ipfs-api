@@ -1,7 +1,7 @@
 package Network.IPFS.MerkleDAG;
 
 // An IPFS MerkleDAG Link
-message Link {
+message PBLink {
 
   // multihash of the target object
   optional bytes hash = 1;
@@ -14,10 +14,10 @@ message Link {
 }
 
 // An IPFS MerkleDAG Node
-message Node {
+message PBNode {
 
   // refs to other objects
-  repeated Link links = 2;
+  repeated PBLink links = 2;
 
   // opaque user data
   optional bytes data = 1;
