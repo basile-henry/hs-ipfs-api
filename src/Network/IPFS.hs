@@ -30,9 +30,9 @@ module Network.IPFS (
 
 import           Control.Monad                    (foldM, forM)
 import           Data.Aeson                       (FromJSON (..),
-                                                   Value (String), withObject,
                                                    (.:), (.:?))
 import qualified Data.Aeson                       as JSON
+import           Data.Aeson.Types                 (Parser)
 import           Data.ByteString.Lazy             (ByteString, fromStrict,
                                                    toStrict)
 import           Data.ByteString.Lazy.UTF8        (fromString, lines, toString)
@@ -46,8 +46,9 @@ import           Data.Text                        (unpack)
 import           GHC.Generics                     (Generic)
 import           Network.IPFS.API                 (Content (..), Endpoint (..),
                                                    call, callWithContent)
-import qualified Network.IPFS.MerkleDAG.Link      as PBL
-import qualified Network.IPFS.MerkleDAG.Node      as PBN
+import qualified Network.IPFS.MerkleDAG.PBLink    as PBL
+import qualified Network.IPFS.MerkleDAG.PBNode    as PBN
+import qualified Network.MultiAddr                as MA
 import           Prelude                          hiding (lines)
 import           System.Directory                 (doesDirectoryExist,
                                                    getDirectoryContents)
@@ -58,8 +59,8 @@ import           Text.ProtocolBuffers.WireMessage (messageGet)
 type Hash     = MD.MultihashDigest
 
 instance FromJSON Hash where
-    parseJSON (String s) = either (fail "Expected a Hash String") return $ decode . unpack $ s
-    parseJSON _          = fail "Expected a Hash String"
+    parseJSON (JSON.String s) = either (fail "Expected a Hash String") return $ decode . unpack $ s
+    parseJSON _               = fail "Expected a Hash String"
 
 type Key      = ByteString -- Is it a multihash?
 type Data     = ByteString
@@ -67,7 +68,9 @@ data Template = Unixfs | None deriving Show
 data GetHash  = GetHash { getHash :: Hash } deriving (Generic, Show)
 
 instance FromJSON GetHash where
-    parseJSON = withObject "" $ \o -> GetHash <$> o .: "Hash"
+    parseJSON (JSON.Object o) = GetHash <$> o .: "Hash"
+    parseJSON _               = fail "Expected a GetHash"
+
 
 data FileHash = FileHash {
         fileName :: FilePath,
@@ -75,9 +78,34 @@ data FileHash = FileHash {
     } deriving (Generic, Show, Eq)
 
 instance FromJSON FileHash where
-    parseJSON = withObject "" $ \o -> FileHash
+    parseJSON (JSON.Object o) = FileHash
         <$> o .: "Name"
         <*> o .: "Hash"
+    parseJSON _               = fail "Expected a FileHash"
+
+data Link   = Link {
+        hash :: Maybe Hash,
+        name :: Maybe FilePath,
+        size :: Maybe Int
+    } deriving (Generic, Eq, Show)
+
+instance FromJSON Link where
+    parseJSON (JSON.Object o) = Link
+        <$> o .:? "Hash"
+        <*> o .:? "Name"
+        <*> o .:? "Size"
+    parseJSON _              = fail "Expected a Link"
+
+data Node   = Node {
+        links   :: [Link],
+        payload :: Maybe Data
+    } deriving (Generic, Show, Eq)
+
+instance FromJSON Node where
+    parseJSON (JSON.Object o) = Node
+        <$> o .:  "Links"
+        <*> o .:? "Data"
+    parseJSON _              = fail "Expected a Node"
 
 data Object = Object {
         objectHash    :: Hash,
@@ -88,35 +116,28 @@ data Object = Object {
 data ID = ID {
         idHash          :: Hash,
         publicKey       :: Key,
-        addresses       :: [FilePath], -- TODO replace with multiaddresses ?
+        addresses       :: [MA.MultiAddr], -- TODO replace with multiaddresses ?
         agentVersion    :: String,
         protocolVersion :: String
     } deriving (Generic, Show, Eq)
 
 instance FromJSON ID where
-    parseJSON = withObject "" $ \o -> ID
+    parseJSON (JSON.Object o) = ID
         <$> o .: "ID"
         <*> o .: "PublicKey"
-        <*> o .: "Addresses"
+        <*> parseAddresses o
         <*> o .: "AgentVersion"
         <*> o .: "ProtocolVersion"
+    parseJSON _               = fail "Expected an ID"
+
+parseAddresses :: JSON.Object -> Parser [MA.MultiAddr]
+parseAddresses o = (maybe
+    (fail "Could parse MultiAddr")
+    return
+    =<< sequence . map MA.fromString) <$> (o .: "Addresses")
 
 instance FromJSON ByteString where
     parseJSON = (fromString <$>) . parseJSON
-
-instance FromJSON Utf8 where
-    parseJSON = (uFromString <$>) . parseJSON
-
-instance FromJSON PBN.Node where
-    parseJSON = withObject "" $ \o -> PBN.Node
-        <$> (fromList . maybeToList <$> o .:? "Links")
-        <*> o .: "Data"
-
-instance FromJSON PBL.Link where
-    parseJSON = withObject "" $ \o -> PBL.Link
-        <$> o .: "Hash"
-        <*> o .: "Name"
-        <*> o .: "Size"
 
 encode :: Hash -> String
 encode hash = toString . MB.encode MB.Base58 $ MD.encode (MD.algorithm hash) (MD.digest hash)
@@ -145,7 +166,7 @@ ls = undefined
 
 -- | = object
 
-getNode :: Endpoint -> Hash -> IO PBN.Node
+getNode :: Endpoint -> Hash -> IO PBN.PBNode
 getNode endpoint hash = do
     resp <- call endpoint
         ["object", "get"] [("encoding", "protobuf")]
@@ -173,8 +194,8 @@ newObject endpoint None = (getHash <$>)
     <$> JSON.decode
     <$> call endpoint ["object", "new"] [] []
 
--- Should PBL.Link be exported?
--- getLinks :: Endpoint -> Hash -> IO (Maybe [PBL.Link])
+-- Should PBL.PBLink be exported?
+-- getLinks :: Endpoint -> Hash -> IO (Maybe [PBL.PBLink])
 
 -- | == object patch
 

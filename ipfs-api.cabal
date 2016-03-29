@@ -57,8 +57,8 @@ library
   
   -- Modules included in this library but not exported.
   other-modules:      Network.IPFS.MerkleDAG,
-                      Network.IPFS.MerkleDAG.Link,
-                      Network.IPFS.MerkleDAG.Node,
+                      Network.IPFS.MerkleDAG.PBLink,
+                      Network.IPFS.MerkleDAG.PBNode,
                       Network.IPFS.UnixFS,
                       Network.IPFS.UnixFS.Data,
                       Network.IPFS.UnixFS.Data.DataType,
@@ -77,6 +77,7 @@ library
                       http-types,
                       http-client,
                       multihash,
+                      multiaddr,
                       blaze-builder,
                       bytestring,
                       protocol-buffers,
