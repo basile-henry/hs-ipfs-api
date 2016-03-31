@@ -23,7 +23,8 @@ tests endpoint = testGroup "Network.IPFS" [
         testCase  "testAdd"        $ testAdd        endpoint,
         testCase  "testAddFile"    $ testAddFile    endpoint,
         testCase  "testAddFiles"   $ testAddFiles   endpoint,
-        testCase  "testAddDir"     $ testAddDir     endpoint
+        testCase  "testAddDir"     $ testAddDir     endpoint,
+        testCase  "testMount"      $ testMount      endpoint
         -- testCase  "testLs"         $ testLs         endpoint
     ]
 
@@ -122,3 +123,8 @@ testLs endpoint = do
             FileHash "file2" $ decode' "QmbFMke1KXqnYyBBWxB74N4c5SBnJMVAiMNRcGu6x1AwQH",
             FileHash "file3" $ decode' "QmbFMke1KXqnYyBBWxB74N4c5SBnJMVAiMNRcGu6x1AwQH"
         ]    
+
+testMount :: Endpoint -> Assertion
+testMount endpoint = do
+    success <- mount endpoint Nothing Nothing
+    assertBool "Failed to mount properly" success

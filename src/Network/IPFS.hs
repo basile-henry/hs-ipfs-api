@@ -25,7 +25,8 @@ module Network.IPFS (
     add,
     addFile,
     addFiles,
-    addDir
+    addDir,
+    mount
 ) where
 
 import           Control.Monad                    (foldM, forM)
@@ -255,3 +256,31 @@ addDir endpoint topdir = do
         applyHash Nothing _         = return Nothing
         applyHash _       Nothing   = return Nothing
         applyHash (Just r) (Just f) = addLink endpoint r f
+
+-- | = mount
+
+data MountData = MountData {
+        ipfsPath :: Maybe FilePath,
+        ipnsPath :: Maybe FilePath,
+        message  :: Maybe String
+    } deriving (Generic, Show, Eq)
+
+instance FromJSON MountData where
+    parseJSON (JSON.Object o) = MountData
+        <$> o .:? "IPFS"
+        <*> o .:? "IPNS"
+        <*> o .:? "Message"
+    parseJSON _               = fail "Expected a MountData json"
+
+mount :: Endpoint -> Maybe FilePath -> Maybe FilePath -> IO Bool
+mount endpoint ipfsPath ipnsPath = checkMountData
+    <$> JSON.decode
+    <$> call endpoint ["mount"] options []
+    where
+        options :: [(String, String)]
+        options = (maybeToList $ sequence ("f", ipfsPath))
+            ++ (maybeToList $ sequence ("n", ipnsPath))
+
+        checkMountData :: Maybe MountData -> Bool
+        checkMountData (Just (MountData (Just _) (Just _) Nothing)) = True
+        checkMountData _                                            = False
