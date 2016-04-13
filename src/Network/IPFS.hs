@@ -49,7 +49,7 @@ import           Network.IPFS.API                 (Content (..), Endpoint (..),
                                                    call, callWithContent)
 import qualified Network.IPFS.MerkleDAG.PBLink    as PBL
 import qualified Network.IPFS.MerkleDAG.PBNode    as PBN
-import qualified Network.MultiAddr                as MA
+import           Network.Multiaddr                (Multiaddr)
 import           Prelude                          hiding (lines)
 import           System.Directory                 (doesDirectoryExist,
                                                    getDirectoryContents)
@@ -117,7 +117,7 @@ data Object = Object {
 data ID = ID {
         idHash          :: Hash,
         publicKey       :: Key,
-        addresses       :: [MA.MultiAddr], -- TODO replace with multiaddresses ?
+        addresses       :: [Multiaddr], -- TODO replace with multiaddresses ?
         agentVersion    :: String,
         protocolVersion :: String
     } deriving (Generic, Show, Eq)
@@ -126,16 +126,10 @@ instance FromJSON ID where
     parseJSON (JSON.Object o) = ID
         <$> o .: "ID"
         <*> o .: "PublicKey"
-        <*> parseAddresses o
+        <*> (map read <$> o .: "Addresses")
         <*> o .: "AgentVersion"
         <*> o .: "ProtocolVersion"
     parseJSON _               = fail "Expected an ID"
-
-parseAddresses :: JSON.Object -> Parser [MA.MultiAddr]
-parseAddresses o = (maybe
-    (fail "Couldn't parse MultiAddr")
-    return
-    =<< sequence . map MA.fromString) <$> (o .: "Addresses")
 
 instance FromJSON ByteString where
     parseJSON = (fromString <$>) . parseJSON
@@ -273,13 +267,13 @@ instance FromJSON MountData where
     parseJSON _               = fail "Expected a MountData json"
 
 mount :: Endpoint -> Maybe FilePath -> Maybe FilePath -> IO Bool
-mount endpoint ipfsPath ipnsPath = checkMountData
+mount endpoint ipfs ipns = checkMountData
     <$> JSON.decode
     <$> call endpoint ["mount"] options []
     where
         options :: [(String, String)]
-        options = (maybeToList $ sequence ("f", ipfsPath))
-            ++ (maybeToList $ sequence ("n", ipnsPath))
+        options = (maybeToList $ sequence ("f", ipfs))
+            ++ (maybeToList $ sequence ("n", ipns))
 
         checkMountData :: Maybe MountData -> Bool
         checkMountData (Just (MountData (Just _) (Just _) Nothing)) = True
