@@ -1,23 +1,24 @@
 module Network.IPFS.API.Tests(tests) where
 
 import           Data.ByteString.Lazy.UTF8 (fromString)
+import           Network.IPFS              (IPFS (..))
 import           Network.IPFS.API
 import           Test.HUnit                (Assertion, (@?=))
 import           Test.Tasty                (TestTree, testGroup)
 import           Test.Tasty.HUnit          (testCase)
 
-tests :: Endpoint -> TestTree
-tests endpoint = testGroup "Network.IPFS.API" [
-        testCase "testCall"            $ testCall            endpoint,
-        testCase "testCallWithContent" $ testCallWithContent endpoint
+tests :: IPFS TestTree
+tests = testGroup "Network.IPFS.API" <$> sequence [
+        testCase "testCall"            <$> testCall,
+        testCase "testCallWithContent" <$> testCallWithContent
     ]
 
-testCall :: Endpoint -> Assertion
-testCall endpoint = do
-    configAddr <- call endpoint ["config"] [] ["Addresses.API"]
-    configAddr @?= fromString "{\"Key\":\"Addresses.API\",\"Value\":\"/ip4/127.0.0.1/tcp/5001\"}\n"
+testCall :: IPFS Assertion
+testCall = do
+    configAddr <- call ["config"] [] ["Addresses.API"]
+    return $ configAddr @?= fromString "{\"Key\":\"Addresses.API\",\"Value\":\"/ip4/127.0.0.1/tcp/5001\"}\n"
 
-testCallWithContent :: Endpoint -> Assertion
-testCallWithContent endpoint = do
-    fileHash <- callWithContent endpoint ["add"] [("q", "true")] [] (Raw $ fromString "Hello test!\n")
-    fileHash @?= fromString "{\"Name\":\"QmeVPgSQ5Hpq9hiqw9X8CCQx421Ei9SkmtzXyhkSHdcB4A\",\"Hash\":\"QmeVPgSQ5Hpq9hiqw9X8CCQx421Ei9SkmtzXyhkSHdcB4A\"}\n"
+testCallWithContent :: IPFS Assertion
+testCallWithContent = do
+    fileHash <- callWithContent ["add"] [("q", "true")] [] (Raw $ fromString "Hello test!\n")
+    return $ fileHash @?= fromString "{\"Name\":\"QmeVPgSQ5Hpq9hiqw9X8CCQx421Ei9SkmtzXyhkSHdcB4A\",\"Hash\":\"QmeVPgSQ5Hpq9hiqw9X8CCQx421Ei9SkmtzXyhkSHdcB4A\"}\n"

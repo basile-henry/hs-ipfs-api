@@ -5,12 +5,15 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Network.IPFS (
+    IPFS (..),
+    Endpoint (..),
     Hash,
     Data,
     Template (..),
     FileHash (..),
     Object (..),
     ID (..),
+    runIPFS,
     encode,
     decode,
     cat,
@@ -29,9 +32,10 @@ module Network.IPFS (
     mount
 ) where
 
-import           Control.Monad                    (foldM, forM)
-import           Data.Aeson                       (FromJSON (..),
-                                                   (.:), (.:?))
+import           Control.Monad                    (foldM, forM, liftM2)
+import           Control.Monad.IO.Class           (liftIO)
+import           Control.Monad.Trans.Reader       (runReaderT)
+import           Data.Aeson                       (FromJSON (..), (.:), (.:?))
 import qualified Data.Aeson                       as JSON
 import           Data.Aeson.Types                 (Parser)
 import           Data.ByteString.Lazy             (ByteString, fromStrict,
@@ -45,10 +49,11 @@ import qualified Data.Multihash.Digest            as MD
 import           Data.Sequence                    (fromList)
 import           Data.Text                        (unpack)
 import           GHC.Generics                     (Generic)
-import           Network.IPFS.API                 (Content (..), Endpoint (..),
-                                                   call, callWithContent)
+import           Network.IPFS.API                 (Content (..), call,
+                                                   callWithContent)
 import qualified Network.IPFS.MerkleDAG.PBLink    as PBL
 import qualified Network.IPFS.MerkleDAG.PBNode    as PBN
+import           Network.IPFS.Types               (Endpoint (..), IPFS (..))
 import           Network.Multiaddr                (Multiaddr)
 import           Prelude                          hiding (lines)
 import           System.Directory                 (doesDirectoryExist,
@@ -56,6 +61,7 @@ import           System.Directory                 (doesDirectoryExist,
 import           System.FilePath                  (splitPath, (</>))
 import           Text.ProtocolBuffers.Basic       (Utf8, uFromString, uToString)
 import           Text.ProtocolBuffers.WireMessage (messageGet)
+
 
 type Hash     = MD.MultihashDigest
 
@@ -142,114 +148,113 @@ decode string = (MD.decode . toStrict) =<< (MB.decode MB.Base58 $ fromString str
 
 -- | = cat
 
-cat :: Endpoint -> FilePath -> IO ByteString
-cat endpoint path = call endpoint ["cat"] [] [path]
+cat :: FilePath -> IPFS ByteString
+cat path = call ["cat"] [] [path]
 
 -- | = id
 
-getID :: Endpoint -> IO (Maybe ID)
-getID endpoint = JSON.decode <$> call endpoint ["id"] [] []
+getID :: IPFS ID
+getID = maybe (error "Failed to retrieve ID") id . JSON.decode
+    <$> call ["id"] [] []
 
 -- | = ls
 
-ls :: Endpoint -> FilePath -> IO (Maybe [FileHash])
+ls :: FilePath -> IPFS [FileHash]
 ls = undefined
--- ls endpoint path = do
---     list <- call endpoint ["ls"] [] [path]
+-- ls path = do
+--     list <- call ["ls"] [] [path]
 --     print list
 --     return $ JSON.decode list
 
 -- | = object
 
-getNode :: Endpoint -> Hash -> IO PBN.PBNode
-getNode endpoint hash = do
-    resp <- call endpoint
+getNode :: Hash -> IPFS PBN.PBNode
+getNode hash = do
+    resp <- call
         ["object", "get"] [("encoding", "protobuf")]
         [encode hash]
     return $ case messageGet resp of
         Right (node, _) -> node
         Left err -> error err
 
-getObject :: Endpoint -> Hash -> IO Object
+getObject :: Hash -> IPFS Object
 getObject = undefined
--- getObject endpoint hash = do
---     pbnode <- getNode endpoint hash
+-- getObject hash = do
+--     pbnode <- getNode hash
 --     let links' = toList $ PBN.links pbnode
 --         names = uToString . fromJust . PBL.name <$> links'
 --         data' = fromJust $ PBN.data' pbnode
 --     children <- mapM resolveLink links'
 --     return (Object hash data' $ zip names children)
---     where resolveLink = getObject endpoint . fromJust . PBL.hash
+--     where resolveLink = getObject fromJust . PBL.hash
 
-newObject :: Endpoint -> Template -> IO (Maybe Hash)
-newObject endpoint Unixfs = (getHash <$>)
-    <$> JSON.decode
-    <$> call endpoint ["object", "new", "unixfs-dir"] [] []
-newObject endpoint None = (getHash <$>)
-    <$> JSON.decode
-    <$> call endpoint ["object", "new"] [] []
+newObject :: Template -> IPFS Hash
+newObject t = getHash
+    <$> maybe (error "Failed to create new object.") id . JSON.decode
+    <$> call args [] []
+    where
+        args :: [String]
+        args = ["object", "new"] ++ case t of
+            Unixfs -> ["unixfs-dir"]
+            None   -> []
 
 -- Should PBL.PBLink be exported?
 -- getLinks :: Endpoint -> Hash -> IO (Maybe [PBL.PBLink])
 
 -- | == object patch
 
-addLink :: Endpoint -> Hash -> FileHash -> IO (Maybe Hash)
-addLink endpoint root (FileHash name hash) = (getHash <$>)
-    <$> JSON.decode
-    <$> call endpoint ["object", "patch", "add-link"] [] [encode root, name, encode hash]
+addLink :: Hash -> FileHash -> IPFS Hash
+addLink root (FileHash name hash) = getHash
+    <$> maybe (error "Failed to add link.") id . JSON.decode
+    <$> call ["object", "patch", "add-link"] [] [encode root, name, encode hash]
 
-removeLink :: Endpoint -> Hash -> FilePath -> IO (Maybe Hash)
-removeLink endpoint root name = (getHash <$>)
-    <$> JSON.decode
-    <$> call endpoint ["object", "patch", "rm-link"] [] [encode root, name]
+removeLink :: Hash -> FilePath -> IPFS Hash
+removeLink root name = getHash
+    <$> maybe (error "Failed to remove link.") id . JSON.decode
+    <$> call ["object", "patch", "rm-link"] [] [encode root, name]
 
-setData :: Endpoint -> Hash -> Data -> IO (Maybe Hash)
-setData endpoint root data' = (getHash <$>)
-    <$> JSON.decode
-    <$> callWithContent endpoint ["object", "patch", "set-data"] [] [encode root] (Raw data')
+setData :: Hash -> Data -> IPFS Hash
+setData root data' = getHash
+    <$> maybe (error "Failed to set data.") id . JSON.decode
+    <$> callWithContent ["object", "patch", "set-data"] [] [encode root] (Raw data')
 
-appendData :: Endpoint -> Hash -> Data -> IO (Maybe Hash)
-appendData endpoint root data' = (getHash <$>)
-    <$> JSON.decode
-    <$> callWithContent endpoint ["object", "patch", "append-data"] [] [encode root] (Raw data')
+appendData :: Hash -> Data -> IPFS Hash
+appendData root data' = getHash
+    <$> maybe (error "Failed to append data.") id . JSON.decode
+    <$> callWithContent ["object", "patch", "append-data"] [] [encode root] (Raw data')
 
 -- | = add
 
-add :: Endpoint -> ByteString -> IO (Maybe FileHash)
-add endpoint raw = JSON.decode
-    <$> callWithContent endpoint ["add"] [("q", "true")] [] (Raw raw)
+add :: ByteString -> IPFS FileHash
+add raw = maybe (error "Failed to add.") id . JSON.decode
+    <$> callWithContent ["add"] [("q", "true")] [] (Raw raw)
 
-addFile :: Endpoint -> FilePath -> IO (Maybe FileHash)
-addFile endpoint path = JSON.decode
-    <$> callWithContent endpoint ["add"] [("q", "true")] [] (File path)
+addFile :: FilePath -> IPFS FileHash
+addFile path = maybe (error "Failed to add file.") id . JSON.decode
+    <$> callWithContent ["add"] [("q", "true")] [] (File path)
 
-addFiles :: Endpoint -> [FilePath] -> IO (Maybe [FileHash])
-addFiles endpoint paths = (mapM JSON.decode)
+addFiles :: [FilePath] -> IPFS [FileHash]
+addFiles paths = maybe (error "Failed to add files.") id . (mapM JSON.decode)
     <$> lines
-    <$> callWithContent endpoint ["add"] [("q", "true")] [] (Files paths)
+    <$> callWithContent ["add"] [("q", "true")] [] (Files paths)
 
-addDir :: Endpoint -> FilePath -> IO (Maybe FileHash)
-addDir endpoint topdir = do
-    doesDirectoryExist topdir >>= (\case
-        False -> return Nothing
-        True  -> do
-            names <- getDirectoryContents topdir
+addDir :: FilePath -> IPFS FileHash
+addDir topdir = do
+    isDir <- liftIO $ doesDirectoryExist topdir
+    if isDir
+        then do
+            names <- liftIO $ getDirectoryContents topdir
             let properNames = filter (`notElem` [".", ".."]) names
             fileHashes <- forM properNames $ \name -> do
                 let path = topdir </> name
-                isDirectory <- doesDirectoryExist path
+                isDirectory <- liftIO $ doesDirectoryExist path
                 if isDirectory
-                    then addDir  endpoint path
-                    else addFile endpoint path
-            root <- newObject endpoint Unixfs
-            hash <- foldM applyHash root fileHashes
-            return $ FileHash (last . splitPath $ topdir) <$> hash)
-    where
-        applyHash :: Maybe Hash -> Maybe FileHash -> IO (Maybe Hash)
-        applyHash Nothing _         = return Nothing
-        applyHash _       Nothing   = return Nothing
-        applyHash (Just r) (Just f) = addLink endpoint r f
+                    then addDir  path
+                    else addFile path
+            root <- newObject Unixfs
+            hash <- foldM addLink root fileHashes
+            return $ FileHash (last . splitPath $ topdir) hash
+        else error $ "Directory " ++ show topdir ++ " does not exist."
 
 -- | = mount
 
@@ -266,10 +271,10 @@ instance FromJSON MountData where
         <*> o .:? "Message"
     parseJSON _               = fail "Expected a MountData json"
 
-mount :: Endpoint -> Maybe FilePath -> Maybe FilePath -> IO Bool
-mount endpoint ipfs ipns = checkMountData
+mount :: Maybe FilePath -> Maybe FilePath -> IPFS Bool
+mount ipfs ipns = checkMountData
     <$> JSON.decode
-    <$> call endpoint ["mount"] options []
+    <$> call ["mount"] options []
     where
         options :: [(String, String)]
         options = (maybeToList $ sequence ("f", ipfs))
@@ -278,3 +283,6 @@ mount endpoint ipfs ipns = checkMountData
         checkMountData :: Maybe MountData -> Bool
         checkMountData (Just (MountData (Just _) (Just _) Nothing)) = True
         checkMountData _                                            = False
+
+runIPFS :: Endpoint -> IPFS a -> IO a
+runIPFS endpoint (IPFS reader) = runReaderT reader endpoint

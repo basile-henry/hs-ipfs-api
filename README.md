@@ -24,6 +24,8 @@ Take a look at the [ToDo list](TODO.md).
 
 Note: Some of the tests are node dependent and might publish hashes (if that is a problem, disable the IPNS tests by modifying tests/Main.hs)
 
+Make sure to unmount `/ipns` before running a test with `fusermount -u /ipns` otherwise IPNS publish fails.
+
 ```zsh
 cabal configure --enable-test
 cabal install --only-dependencies --enable-test

@@ -10,6 +10,7 @@ module Network.IPFS.API (
 ) where
 
 import           Blaze.ByteString.Builder              (Builder, toByteString)
+import           Control.Monad.Trans.Reader            (ReaderT (..))
 import           Data.ByteString.Lazy                  (ByteString)
 import qualified Data.ByteString.UTF8                  as U
 import           Data.Maybe                            (fromJust)
@@ -17,9 +18,11 @@ import qualified Data.Text                             as T
 import qualified Network.HTTP.Client.MultipartFormData as MFD
 import qualified Network.HTTP.Conduit                  as HTTP
 import qualified Network.HTTP.Types.URI                as URI
+import           Network.IPFS.Types                    (Endpoint (..),
+                                                        IPFS (..))
 
--- | An 'Endpoint' is an IPFS node that will execute an API request
-data Endpoint = Endpoint HTTP.Manager String
+withEndpoint :: (Endpoint -> IO a) -> IPFS a
+withEndpoint io = IPFS (ReaderT (\endpoint -> io endpoint))
 
 -- | To initialize the API at an IPFS node, the Endpoint
 -- For example (in a do block):
@@ -38,19 +41,21 @@ data Content = Empty
              | Files [FilePath]
              | Raw   ByteString
 
-
 -- | The 'call' function makes an API call to the IPFS node given by the 'Endpoint'
-call :: Endpoint -> [String] -> [(String, String)] -> [String] -> IO ByteString
-call e cmd opts args = callWithContent e cmd opts args Empty
+call :: [String] -> [(String, String)] -> [String] -> IPFS ByteString
+call cmd opts args = callWithContent cmd opts args Empty
 
 -- | The 'callWithContent' function makes an API call to the IPFS node given by the 'Endpoint'
-callWithContent :: Endpoint            -- ^ IPFS node
-                -> [String]            -- ^ command
+callWithContent :: [String]            -- ^ command
                 -> [(String, String)]  -- ^ options [(key, value)]
                 -> [String]            -- ^ arguments (an IPFS path for example)
                 -> Content             -- ^ content to send
-                -> IO ByteString       -- ^ Return of a successful API request
-callWithContent (Endpoint manager host) cmd opts args content = do
+                -> IPFS ByteString       -- ^ Return of a successful API request
+callWithContent cmd opts args content =
+    withEndpoint $ \endpoint -> callWithContentIO endpoint cmd opts args content
+
+callWithContentIO :: Endpoint -> [String] -> [(String, String)] -> [String] -> Content -> IO ByteString       -- ^ Return of a successful API request
+callWithContentIO (Endpoint manager host) cmd opts args content = do
     req <- MFD.formDataBody partsWithHeaders simpleReq
     HTTP.responseBody <$> HTTP.httpLbs req manager
     where
