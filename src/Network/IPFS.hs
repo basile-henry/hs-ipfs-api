@@ -1,21 +1,12 @@
 {-# LANGUAGE DeriveGeneric     #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Network.IPFS (
-    IPFS (..),
-    Endpoint (..),
-    Multihash,
-    Data,
-    Template (..),
-    FileHash (..),
-    Object (..),
-    ID (..),
+    -- * Types
+    module Network.IPFS.Types,
+    -- * Running IPFS
     runIPFS,
-    encode,
-    decode,
+    -- * API
     cat,
     getID,
     ls,
@@ -50,9 +41,9 @@ import qualified Network.IPFS.MerkleDAG.PBLink    as PBL
 import qualified Network.IPFS.MerkleDAG.PBNode    as PBN
 import           Network.IPFS.Types               (Data, Endpoint (..),
                                                    FileHash (..), ID (..),
-                                                   IPFS (..), Multihash (..),
-                                                   Object (..), Template (..),
-                                                   decode, encode)
+                                                   IPFS (..), Key,
+                                                   Multihash (..), Object (..),
+                                                   Template (..))
 import           Prelude                          hiding (lines)
 import           System.Directory                 (doesDirectoryExist,
                                                    getDirectoryContents)
@@ -64,18 +55,15 @@ import           Text.ProtocolBuffers.WireMessage (messageGet)
 runIPFS :: Endpoint -> IPFS a -> IO a
 runIPFS endpoint (IPFS reader) = runReaderT reader endpoint
 
--- | = cat
 
 cat :: FilePath -> IPFS ByteString
 cat path = call ["cat"] [] [path]
 
--- | = id
 
 getID :: IPFS ID
 getID = maybe (error "Failed to retrieve ID") id . JSON.decode
     <$> call ["id"] [] []
 
--- | = ls
 
 ls :: FilePath -> IPFS [FileHash]
 ls = undefined
@@ -84,13 +72,12 @@ ls = undefined
 --     print list
 --     return $ JSON.decode list
 
--- | = object
 
 getNode :: Multihash -> IPFS PBN.PBNode
 getNode hash = do
     resp <- call
         ["object", "get"] [("encoding", "protobuf")]
-        [encode hash]
+        [show hash]
     return $ case messageGet resp of
         Right (node, _) -> node
         Left err -> error err
@@ -125,29 +112,27 @@ newObject t = getHash
 -- Should PBL.PBLink be exported?
 -- getLinks :: Endpoint -> Multihash -> IO (Maybe [PBL.PBLink])
 
--- | == object patch
 
 addLink :: Multihash -> FileHash -> IPFS Multihash
 addLink root (FileHash name hash) = getHash
     <$> maybe (error "Failed to add link.") id . JSON.decode
-    <$> call ["object", "patch", "add-link"] [] [encode root, name, encode hash]
+    <$> call ["object", "patch", "add-link"] [] [show root, name, show hash]
 
 removeLink :: Multihash -> FilePath -> IPFS Multihash
 removeLink root name = getHash
     <$> maybe (error "Failed to remove link.") id . JSON.decode
-    <$> call ["object", "patch", "rm-link"] [] [encode root, name]
+    <$> call ["object", "patch", "rm-link"] [] [show root, name]
 
 setData :: Multihash -> Data -> IPFS Multihash
 setData root data' = getHash
     <$> maybe (error "Failed to set data.") id . JSON.decode
-    <$> callWithContent ["object", "patch", "set-data"] [] [encode root] (Raw data')
+    <$> callWithContent ["object", "patch", "set-data"] [] [show root] (Raw data')
 
 appendData :: Multihash -> Data -> IPFS Multihash
 appendData root data' = getHash
     <$> maybe (error "Failed to append data.") id . JSON.decode
-    <$> callWithContent ["object", "patch", "append-data"] [] [encode root] (Raw data')
+    <$> callWithContent ["object", "patch", "append-data"] [] [show root] (Raw data')
 
--- | = add
 
 add :: ByteString -> IPFS FileHash
 add raw = maybe (error "Failed to add.") id . JSON.decode

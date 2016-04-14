@@ -2,7 +2,6 @@ module Network.IPNS.Tests(tests) where
 
 import           Data.Maybe       (fromJust)
 import           Network.IPFS     (IPFS (..))
-import           Network.IPFS.API
 import           Network.IPNS
 import           Test.HUnit       (Assertion, (@?=))
 import           Test.Tasty       (TestTree, testGroup)

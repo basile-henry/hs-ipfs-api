@@ -1,5 +1,7 @@
 {-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Network.IPFS.Types (
     IPFS (..),
@@ -12,25 +14,24 @@ module Network.IPFS.Types (
     Link (..),
     Node (..),
     Object (..),
-    ID (..),
-    encode,
-    decode
+    ID (..)
 ) where
 
-import           Control.Monad              (ap, liftM)
-import           Control.Monad.Fix          (MonadFix, mfix)
-import           Control.Monad.IO.Class     (MonadIO, liftIO)
-import           Control.Monad.Trans.Reader (ReaderT)
-import           Data.Aeson                 (FromJSON (..), (.:), (.:?))
-import qualified Data.Aeson                 as JSON
-import           Data.ByteString.Lazy       (ByteString, toStrict)
-import           Data.ByteString.Lazy.UTF8  (fromString, lines, toString)
-import qualified Data.Multihash.Base        as MB
-import           Data.Text                  (unpack)
-import           GHC.Generics               (Generic)
-import qualified Network.HTTP.Conduit       as HTTP
-import           Network.Multiaddr          (Multiaddr)
-
+import           Control.Applicative          (many)
+import           Control.Monad                (ap, liftM)
+import           Control.Monad.Fix            (MonadFix, mfix)
+import           Control.Monad.IO.Class       (MonadIO, liftIO)
+import           Control.Monad.Trans.Reader   (ReaderT)
+import           Data.Aeson                   (FromJSON (..), (.:), (.:?))
+import qualified Data.Aeson                   as JSON
+import           Data.ByteString.Lazy         (ByteString)
+import           Data.ByteString.Lazy.UTF8    (fromString, toString)
+import qualified Data.Multihash.Base          as MB
+import           Data.Text                    (unpack)
+import           GHC.Generics                 (Generic)
+import qualified Network.HTTP.Conduit         as HTTP
+import           Network.Multiaddr            (Multiaddr)
+import           Text.ParserCombinators.ReadP (ReadP, get, readP_to_S, satisfy)
 
 -- | An 'Endpoint' is an IPFS node that will execute an API request
 data Endpoint = Endpoint HTTP.Manager String
@@ -54,10 +55,26 @@ instance Applicative IPFS where
     pure = return
     (<*>) = ap
 
-newtype Multihash = Multihash { multihash :: ByteString } deriving (Generic, Show, Eq)
+newtype Multihash = Multihash { multihash :: ByteString } deriving (Generic, Eq)
 
+instance Show Multihash where
+    show = toString . MB.encode MB.Base58 . multihash
+
+instance Read Multihash where
+    readsPrec _ = readP_to_S parseMultihash
+        where
+            parseMultihash :: ReadP Multihash
+            parseMultihash = do
+                base58 <- many $ oneOf "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz" -- base58 bitcoin alphabet
+                case MB.decode MB.Base58 . fromString $ base58 of
+                    (Left  e) -> fail e
+                    (Right h) -> return $ Multihash h
+
+            oneOf :: String -> ReadP Char
+            oneOf s = satisfy (`elem` s)
+            
 instance FromJSON Multihash where
-    parseJSON (JSON.String s) = return $ decode . unpack $ s
+    parseJSON (JSON.String s) = return $ read . unpack $ s
     parseJSON _               = fail "Expected a Multihash String"
 
 type Key      = ByteString
@@ -124,9 +141,3 @@ instance FromJSON ID where
 
 instance FromJSON ByteString where
     parseJSON = (fromString <$>) . parseJSON
-
-encode :: Multihash -> String
-encode = toString . MB.encode MB.Base58 . multihash
-
-decode :: String -> Multihash
-decode = either (error "Expected a Multihash.") Multihash . MB.decode MB.Base58 . fromString

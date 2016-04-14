@@ -53,8 +53,6 @@ library
   -- Modules exported by the library.
   exposed-modules:    Network.IPFS,
                       Network.IPFS.API,
-                      Network.IPFS.Path,
-                      Network.IPFS.Types,
                       Network.IPNS
   
   -- Modules included in this library but not exported.
@@ -64,7 +62,9 @@ library
                       Network.IPFS.UnixFS,
                       Network.IPFS.UnixFS.Data,
                       Network.IPFS.UnixFS.Data.DataType,
-                      Network.IPFS.UnixFS.Metadata
+                      Network.IPFS.UnixFS.Metadata,
+                      Network.IPFS.Path,
+                      Network.IPFS.Types
   
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:    

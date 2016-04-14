@@ -1,52 +1,49 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 module Network.IPFS.Path (
-    Path (..),
-    fromString,
-    toString
+    Path (..)
 ) where
 
-import           Data.ByteString.Lazy      (toStrict)
-import qualified Data.ByteString.Lazy.UTF8 as UTF8
-import           Data.List                 (intercalate)
-import           Data.List.Split           (splitOn)
-import qualified Data.Multihash.Base       as MB
-import qualified Data.Multihash.Digest     as MD
+import           Control.Applicative          (many, some, (<|>))
+import           Data.ByteString.Lazy         (toStrict)
+import qualified Data.ByteString.Lazy.UTF8    as UTF8
+import           Data.List                    (intercalate)
+import           Data.List.Split              (splitOn)
+import           GHC.Generics                 (Generic)
+import           Network.IPFS.Types           (Multihash)
+import           Text.ParserCombinators.ReadP (ReadP, char, readP_to_S,
+                                               readS_to_P, satisfy, string)
 
-data PathType = IPFS
-              | IPNS
-              deriving (Eq, Show)
+data Path = PathIPFS Multihash FilePath
+          | PathIPNS Multihash FilePath
+          deriving (Eq, Generic)
 
-data Path     = Path {
-        pathType :: PathType,
-        hash     :: MD.MultihashDigest,
-        filePath :: FilePath
-    } deriving (Eq, Show)
+instance Show Path where
+    show (PathIPFS hash path) = "/ipfs/" ++ show hash ++ slash path
+    show (PathIPNS hash path) = "/ipns/" ++ show hash ++ slash path
 
-fromString :: String -> Maybe Path
-fromString string = Path <$> p <*> h <*> (Just f)
-    where
-        strings :: [String]
-        strings = splitOn "/" string
+slash :: String -> String
+slash s
+    | length s == 0 = ""
+    | head s == '/' = s
+    | otherwise     = '/' : s
 
-        p          :: Maybe PathType
-        hashString :: String
-        f          :: FilePath
-        (p, hashString, f) = case strings !! 0 of
-            "" -> if length strings < 2
-                then (Nothing, "", "")
-                else case strings !! 1 of
-                    "ipfs" -> (Just IPFS, strings !! 2, intercalate "/" $ drop 3 $ strings)
-                    "ipns" -> (Just IPNS, strings !! 2, intercalate "/" $ drop 3 $ strings)
-                    _      -> (Nothing, "", "")
-            _  -> (Just IPFS, strings !! 0, intercalate "/" $ drop 1 $ strings)
+instance Read Path where
+    readsPrec _ = readP_to_S $ parseIPFS <|> parseIPNS
 
-        h :: Maybe MD.MultihashDigest
-        h = either (\_ -> Nothing) Just
-                $ MD.decode . toStrict =<< (MB.decode MB.Base58 $ UTF8.fromString hashString)
+parseIPFS :: ReadP Path
+parseIPFS = do
+    string "/ipfs/"
+    hash <- readS_to_P read
+    path <- parsePath
+    return $ PathIPFS hash path
 
+parseIPNS :: ReadP Path
+parseIPNS = do
+    string "/ipns/"
+    hash <- readS_to_P read
+    path <- parsePath
+    return $ PathIPNS hash path
 
-toString :: Path -> String
-toString (Path IPFS h f) = "/ipfs/" ++ toString' h ++ "/" ++ f
-toString (Path IPNS h f) = "/ipns/" ++ toString' h ++ "/" ++ f
-
-toString' :: MD.MultihashDigest -> String
-toString' h = UTF8.toString . MB.encode MB.Base58 $ MD.encode (MD.algorithm h) (MD.digest h)
+parsePath :: ReadP FilePath
+parsePath = many $ satisfy (\_ -> True)
