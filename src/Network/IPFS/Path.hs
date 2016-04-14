@@ -4,7 +4,7 @@ module Network.IPFS.Path (
     toString
 ) where
 
-import           Data.ByteString.Lazy      (ByteString, fromStrict, toStrict)
+import           Data.ByteString.Lazy      (toStrict)
 import qualified Data.ByteString.Lazy.UTF8 as UTF8
 import           Data.List                 (intercalate)
 import           Data.List.Split           (splitOn)
