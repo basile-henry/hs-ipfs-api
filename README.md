@@ -14,7 +14,7 @@ cabal build
 
 ## Usage
 
-Checkout the [documentation](https://ipfs.io/ipfs/QmV3RcdnACJSDadzouvifqE6y2RGwxFCvNYfe1cuJB745r/)!
+Checkout the [documentation](https://ipfs.io/ipfs/QmWjrFcDXLbaT2z5ZBUJmJqqzS4PsiR8ns7G411XwbXaVY/)!
 
 ## API currently implemented
 
@@ -24,7 +24,7 @@ Take a look at the [ToDo list](TODO.md).
 
 Note: Some of the tests are node dependent and might publish hashes (if that is a problem, disable the IPNS tests by modifying tests/Main.hs)
 
-Make sure to unmount `/ipns` before running a test with `fusermount -u /ipns` otherwise IPNS publish fails.
+Make sure to unmount `/ipns` with `fusermount -u /ipns` before running a test, otherwise IPNS publish fails.
 
 ```zsh
 cabal configure --enable-test
