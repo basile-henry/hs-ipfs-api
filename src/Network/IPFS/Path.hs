@@ -5,6 +5,7 @@ module Network.IPFS.Path (
 ) where
 
 import           Control.Applicative          (many, (<|>))
+import           Data.String                  (IsString (..), fromString)
 import           GHC.Generics                 (Generic)
 import           Network.IPFS.Types           (Multihash, parseMultihash)
 import           Text.ParserCombinators.ReadP (ReadP, readP_to_S, satisfy,
@@ -17,6 +18,9 @@ data Path = PathIPFS Multihash FilePath
 instance Show Path where
     show (PathIPFS hash path) = "/ipfs/" ++ show hash ++ slash path
     show (PathIPNS hash path) = "/ipns/" ++ show hash ++ slash path
+
+instance IsString Path where
+    fromString = read
 
 slash :: String -> String
 slash s
