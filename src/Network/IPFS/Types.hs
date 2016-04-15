@@ -14,10 +14,10 @@ module Network.IPFS.Types (
     Link (..),
     Node (..),
     Object (..),
-    ID (..)
+    ID (..),
+    parseMultihash
 ) where
 
-import           Control.Applicative          (many)
 import           Control.Monad                (ap, liftM)
 import           Control.Monad.Fix            (MonadFix, mfix)
 import           Control.Monad.IO.Class       (MonadIO, liftIO)
@@ -31,7 +31,7 @@ import           Data.Text                    (unpack)
 import           GHC.Generics                 (Generic)
 import qualified Network.HTTP.Conduit         as HTTP
 import           Network.Multiaddr            (Multiaddr)
-import           Text.ParserCombinators.ReadP (ReadP, get, readP_to_S, satisfy)
+import           Text.ParserCombinators.ReadP (ReadP, readP_to_S, munch1)
 
 -- | An 'Endpoint' is an IPFS node that will execute an API request
 data Endpoint = Endpoint HTTP.Manager String
@@ -62,16 +62,11 @@ instance Show Multihash where
 
 instance Read Multihash where
     readsPrec _ = readP_to_S parseMultihash
-        where
-            parseMultihash :: ReadP Multihash
-            parseMultihash = do
-                base58 <- many $ oneOf "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz" -- base58 bitcoin alphabet
-                case MB.decode MB.Base58 . fromString $ base58 of
-                    (Left  e) -> fail e
-                    (Right h) -> return $ Multihash h
 
-            oneOf :: String -> ReadP Char
-            oneOf s = satisfy (`elem` s)
+parseMultihash :: ReadP Multihash
+parseMultihash = do
+    base58 <- munch1 (`elem` ("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz" :: String)) -- base58 bitcoin alphabet
+    either fail (return . Multihash) . MB.decode MB.Base58 . fromString $ base58
             
 instance FromJSON Multihash where
     parseJSON (JSON.String s) = return $ read . unpack $ s
@@ -79,7 +74,7 @@ instance FromJSON Multihash where
 
 type Key      = ByteString
 type Data     = ByteString
-data Template = Unixfs | None deriving Show
+data Template = Unixfs | None deriving (Show, Eq)
 
 data FileHash = FileHash {
         fileName :: FilePath,

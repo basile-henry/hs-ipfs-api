@@ -4,15 +4,11 @@ module Network.IPFS.Path (
     Path (..)
 ) where
 
-import           Control.Applicative          (many, some, (<|>))
-import           Data.ByteString.Lazy         (toStrict)
-import qualified Data.ByteString.Lazy.UTF8    as UTF8
-import           Data.List                    (intercalate)
-import           Data.List.Split              (splitOn)
+import           Control.Applicative          (many, (<|>))
 import           GHC.Generics                 (Generic)
-import           Network.IPFS.Types           (Multihash)
-import           Text.ParserCombinators.ReadP (ReadP, char, readP_to_S,
-                                               readS_to_P, satisfy, string)
+import           Network.IPFS.Types           (Multihash, parseMultihash)
+import           Text.ParserCombinators.ReadP (ReadP, readP_to_S, satisfy,
+                                               string)
 
 data Path = PathIPFS Multihash FilePath
           | PathIPNS Multihash FilePath
@@ -29,21 +25,27 @@ slash s
     | otherwise     = '/' : s
 
 instance Read Path where
-    readsPrec _ = readP_to_S $ parseIPFS <|> parseIPNS
+    readsPrec _ = readP_to_S $ parseIPFS <|> parseIPNS <|> parseDefault
 
 parseIPFS :: ReadP Path
 parseIPFS = do
     string "/ipfs/"
-    hash <- readS_to_P read
+    hash <- parseMultihash
     path <- parsePath
     return $ PathIPFS hash path
 
 parseIPNS :: ReadP Path
 parseIPNS = do
     string "/ipns/"
-    hash <- readS_to_P read
+    hash <- parseMultihash
     path <- parsePath
     return $ PathIPNS hash path
+
+-- When just a hash, the default is IPFS
+parseDefault :: ReadP Path
+parseDefault = do
+    hash <- parseMultihash
+    return $ PathIPFS hash ""
 
 parsePath :: ReadP FilePath
 parsePath = many $ satisfy (\_ -> True)

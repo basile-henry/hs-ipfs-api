@@ -17,17 +17,17 @@ tests = testGroup "Network.IPNS" <$> sequence [
 -- This is node dependent (to be personalised for proper testing)
 testPublish :: IPFS Assertion
 testPublish = do
-    filePath <- publish "QmeVPgSQ5Hpq9hiqw9X8CCQx421Ei9SkmtzXyhkSHdcB4A"
-    return $ filePath @?= "QmZzD8HfE5nK8ud3TVLujvKQNsAzQ8QPDMa1yUUFWhK4iN"
+    path <- publish $ read "QmeVPgSQ5Hpq9hiqw9X8CCQx421Ei9SkmtzXyhkSHdcB4A"
+    return $ path @?= read "QmZzD8HfE5nK8ud3TVLujvKQNsAzQ8QPDMa1yUUFWhK4iN"
 
 -- This is node dependent (to be personalised for proper testing)
 testResolve :: IPFS Assertion
 testResolve = do
-    filePath <- resolve
-    return $ filePath @?= "/ipfs/QmeVPgSQ5Hpq9hiqw9X8CCQx421Ei9SkmtzXyhkSHdcB4A"
+    path <- resolve
+    return $ path @?= read "/ipfs/QmeVPgSQ5Hpq9hiqw9X8CCQx421Ei9SkmtzXyhkSHdcB4A"
 
 -- This is not immutable data (to be kept up to date for proper testing)
 testResolvePath :: IPFS Assertion
 testResolvePath = do
-    filePath <- resolvePath "QmZzD8HfE5nK8ud3TVLujvKQNsAzQ8QPDMa1yUUFWhK4iN"
-    return $ filePath @?= "/ipfs/QmeVPgSQ5Hpq9hiqw9X8CCQx421Ei9SkmtzXyhkSHdcB4A"
+    path <- resolvePath $ read "/ipns/QmZzD8HfE5nK8ud3TVLujvKQNsAzQ8QPDMa1yUUFWhK4iN"
+    return $ path @?= read "/ipfs/QmeVPgSQ5Hpq9hiqw9X8CCQx421Ei9SkmtzXyhkSHdcB4A"

@@ -22,12 +22,12 @@ Publish an \<ipfs-path\> to your identity name:
 
 Resolve the value of your identity:
 
->>> resolve localEndpoint
+>>> resolve
 > Just "/ipfs/QmatmE9msSfkKxoffpHwNLNKgwZG8eT9Bud6YoPab52vpy"
 
 Resolve the value of another name:
 
->>> resolvePath localEndpoint "QmbCMUZw6JFeZ7Wp9jkzbye3Fzp2GGcPgC3nmeUjfVF87n"
+>>> resolvePath "/ipns/QmbCMUZw6JFeZ7Wp9jkzbye3Fzp2GGcPgC3nmeUjfVF87n"
 > Just "/ipfs/QmatmE9msSfkKxoffpHwNLNKgwZG8eT9Bud6YoPab52vpy"
 -}
 
@@ -41,43 +41,33 @@ import           Data.Aeson         (FromJSON (..), decode, withObject, (.:))
 import           GHC.Generics       (Generic)
 import           Network.IPFS.API   (call)
 import           Network.IPFS.Types (IPFS (..))
+import           Network.IPFS.Path  (Path (..))
 
-data Resolve = Resolve { path :: FilePath } deriving (Generic, Show)
+data Resolve = Resolve { path :: Path } deriving (Generic, Show)
 
 instance FromJSON Resolve where
-   parseJSON = withObject "" $ \o -> Resolve <$> o .: "Path"
+   parseJSON = withObject "" $ \o -> Resolve . read <$> o .: "Path"
 
-data Publish = Publish { name :: FilePath } deriving (Generic, Show)
+data Publish = Publish { name :: Path } deriving (Generic, Show)
 
 instance FromJSON Publish where
-   parseJSON = withObject "" $ \o -> Publish <$> o .: "Name"
+   parseJSON = withObject "" $ \o -> Publish . read <$> o .: "Name"
 
 -- | Recursively resolve the IPNS of the current `Endpoint`
-resolve :: IPFS FilePath
+resolve :: IPFS Path
 resolve = path
     <$> maybe (error "Could not resolve name.") id . decode
     <$> call ["name", "resolve"] [("r", "true")] []
 
 -- | Recursively resolve an IPNS file path
-resolvePath :: FilePath -> IPFS FilePath
-resolvePath filePath = path
+resolvePath :: Path -> IPFS Path
+resolvePath (PathIPFS _ _) = error "Can only resolve an IPNS path."
+resolvePath pathIPNS       = path
     <$> maybe (error "Could not resolve name.") id . decode
-    <$> call ["name", "resolve"] [("r", "true")] [filePath]
+    <$> call ["name", "resolve"] [("r", "true")] [show pathIPNS]
 
 -- | Publish an object to IPNS. It publishes the object given by 'Filepath' to the 'Endpoint' 's IPNS
-publish :: FilePath -> IPFS FilePath
-publish filePath = name
+publish :: Path -> IPFS Path
+publish pubPath = name
     <$> maybe (error "Could not resolve name.") id . decode
-    <$> call ["name", "publish"] [] [filePath]
-
--- Publish an object to IPNS. It publishes object given by 'Filepath' to the second 'FilePath'
---
--- On success returns 'Just' 'FilePath'
---
--- On failure returns 'Nothing'
---
--- NB: not yet implemented in the go-ipfs daemon
--- publishTo :: Endpoint -> FilePath -> FilePath -> IO (Maybe FilePath)
--- publishTo endpoint filePath to = (name <$>)
---     <$> decode
---     <$> call endpoint ["name", "publish"] [] [filePath, to]
+    <$> call ["name", "publish"] [] [show pubPath]
